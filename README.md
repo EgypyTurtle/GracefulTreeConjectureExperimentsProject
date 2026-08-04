@@ -70,6 +70,19 @@ Summarize a CSV log:
 python src/graceful_tree.py --summarize-log results/five_leaf_nonspider_max6_branch.csv
 ```
 
+Sweep all non-spider 5-leaf trees with at most 30 edges:
+
+```bash
+python src/graceful_tree.py \
+  --five-leaf-nonspider-by-edges 30 \
+  --method branch \
+  --time-limit 10 \
+  --log results/five_leaf_nonspider_edges30_branch.csv \
+  --save-hardest results/hardest_five_leaf_nonspider_edges30_branch.txt \
+  --save-failed results/failed_five_leaf_nonspider_edges30_branch.txt \
+  --progress 5000
+```
+
 ## Tree Families
 
 ### Spider Trees
@@ -96,6 +109,10 @@ three-branch:  degree 3 branch -- degree 3 branch -- degree 3 branch
 The option `--five-leaf-nonspider-sweep N` enumerates these reduced skeletons
 and subdivides every reduced edge by a positive length at most `N`.
 
+The option `--five-leaf-nonspider-by-edges M` instead enumerates the same
+family with total edge count at most `M`. This is usually the cleaner statement
+for reports and articles.
+
 ## Search Methods
 
 - `exact`: direct backtracking over vertex labels.
@@ -119,4 +136,3 @@ technical summary, known-result context, and experiment status.
 Full CSV logs can become large. This repository keeps a small example CSV under
 `examples/`. For larger runs, generate logs locally using the commands above or
 publish compressed result archives separately.
-

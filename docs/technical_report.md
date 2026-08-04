@@ -238,4 +238,39 @@ vertex and assigns edge differences from large to small while keeping the
 search connected to already labeled branch structure. This solved the final
 22 cases in `0.053s`.
 
+Additional branch-method results:
+
+```text
+MAX_SEGMENT = 6
+cases = 55062
+solved = 55062
+timeouts = 0
+
+MAX_SEGMENT = 7
+cases = 151606
+solved = 151606
+timeouts = 0
+hardest = fiveleaf3-2-6-6-7-6-7-7
+hardest nodes = 25530
+hardest elapsed = 0.519785s
+```
+
+For article-style reporting, an edge-count-bounded enumeration is now available:
+
+```text
+--five-leaf-nonspider-by-edges M
+```
+
+This enumerates all non-spider 5-leaf trees with at most `M` edges, which is a
+more natural formulation than bounding every reduced-edge segment separately.
+Reference sizes:
+
+```text
+edges <= 10: 100 cases
+edges <= 15: 2319 cases
+edges <= 20: 20119 cases
+edges <= 25: 104885 cases
+edges <= 30: 399052 cases
+```
+
 This family is a better next computational target than larger 5-leg spiders.

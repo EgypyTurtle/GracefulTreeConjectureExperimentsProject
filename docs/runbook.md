@@ -44,6 +44,12 @@ checked=66, solved=66, timeouts=0
 & $PY ".\src\graceful_tree.py" --five-leaf-nonspider-sweep 7 --method branch --time-limit 10 --log ".\results\five_leaf_nonspider_max7_branch.csv" --save-hardest ".\results\hardest_five_leaf_nonspider_max7_branch.txt" --save-failed ".\results\failed_five_leaf_nonspider_max7_branch.txt" --progress 5000
 ```
 
+## Non-Spider 5-Leaf Runs by Edge Count
+
+```powershell
+& $PY ".\src\graceful_tree.py" --five-leaf-nonspider-by-edges 30 --method branch --time-limit 10 --log ".\results\five_leaf_nonspider_edges30_branch.csv" --save-hardest ".\results\hardest_five_leaf_nonspider_edges30_branch.txt" --save-failed ".\results\failed_five_leaf_nonspider_edges30_branch.txt" --progress 5000
+```
+
 ## Summarize Results
 
 ```powershell
@@ -55,4 +61,3 @@ checked=66, solved=66, timeouts=0
 ```powershell
 & $PY ".\src\graceful_tree.py" --replay-unsolved ".\results\five_leaf_nonspider_max7_branch.csv" --method branch --time-limit 60 --replay-log ".\results\five_leaf_nonspider_max7_replay60.csv" --progress 50
 ```
-

@@ -1167,6 +1167,62 @@ def run_five_leaf_nonspider_sweep(args: argparse.Namespace) -> int:
     )
 
 
+def run_five_leaf_nonspider_by_edges(args: argparse.Namespace) -> int:
+    max_edges = args.five_leaf_nonspider_by_edges
+    if max_edges < 6:
+        raise ValueError("--five-leaf-nonspider-by-edges needs at least 6 edges")
+
+    def positive_tuples(parts: int, total: int) -> Iterable[tuple[int, ...]]:
+        if parts == 1:
+            if total >= 1:
+                yield (total,)
+            return
+        for first in range(1, total - parts + 2):
+            for rest in positive_tuples(parts - 1, total - first):
+                yield (first, *rest)
+
+    def cases() -> Iterable[tuple[str, int, list[Edge], int | None]]:
+        for total_edges in range(6, max_edges + 1):
+            for lengths in positive_tuples(6, total_edges):
+                bridge = lengths[0]
+                left = tuple(sorted(lengths[1:3]))
+                right = tuple(sorted(lengths[3:6]))
+                if lengths[1:3] != left or lengths[3:6] != right:
+                    continue
+                edges = five_leaf_nonspider_two_branch(bridge, left, right)
+                name = "fiveleaf2e-" + "-".join(map(str, (total_edges, bridge, *left, *right)))
+                yield name, len(edges) + 1, edges, args.seed
+
+            for lengths in positive_tuples(7, total_edges):
+                left_bridge, right_bridge = lengths[0], lengths[1]
+                left = tuple(sorted(lengths[2:4]))
+                middle_leaf = lengths[4]
+                right = tuple(sorted(lengths[5:7]))
+                if lengths[2:4] != left or lengths[5:7] != right:
+                    continue
+                if (left, left_bridge) > (right, right_bridge):
+                    continue
+                edges = five_leaf_nonspider_three_branch(
+                    left_bridge,
+                    right_bridge,
+                    left,
+                    middle_leaf,
+                    right,
+                )
+                name = "fiveleaf3e-" + "-".join(
+                    map(str, (total_edges, left_bridge, right_bridge, *left, middle_leaf, *right))
+                )
+                yield name, len(edges) + 1, edges, args.seed
+
+    return run_cases(
+        cases(),
+        args,
+        "five_leaf_nonspider_by_edges_log.csv",
+        "hardest_five_leaf_nonspider_by_edges.txt",
+        "failed_five_leaf_nonspider_by_edges.txt",
+    )
+
+
 def run_lobster_batch(args: argparse.Namespace) -> int:
     rng = random.Random(args.seed)
     def cases() -> Iterable[tuple[str, int, list[Edge], int | None]]:
@@ -1389,6 +1445,12 @@ def main(argv: list[str]) -> int:
         metavar="MAX_SEGMENT",
         help="check all non-spider 5-leaf trees with every reduced-edge segment length up to MAX_SEGMENT",
     )
+    source.add_argument(
+        "--five-leaf-nonspider-by-edges",
+        type=int,
+        metavar="MAX_EDGES",
+        help="check all non-spider 5-leaf trees with at most MAX_EDGES edges",
+    )
     source.add_argument("--lobster-batch", type=int, metavar="TRIALS", help="run many random lobster-tree trials")
     source.add_argument("--replay-unsolved", help="CSV log to replay rows with solved=0")
     source.add_argument("--analyze-log", help="CSV log to analyze tree structure features")
@@ -1432,6 +1494,8 @@ def main(argv: list[str]) -> int:
             return run_spider_sweep(args)
         if args.five_leaf_nonspider_sweep is not None:
             return run_five_leaf_nonspider_sweep(args)
+        if args.five_leaf_nonspider_by_edges is not None:
+            return run_five_leaf_nonspider_by_edges(args)
         if args.lobster_batch is not None:
             return run_lobster_batch(args)
         if args.replay_unsolved is not None:
