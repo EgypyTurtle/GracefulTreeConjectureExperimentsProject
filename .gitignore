@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+results/
+outputs/
+*.log
+
+# Large generated CSV logs. Keep small curated examples under examples/.
+*.csv
+!examples/*.csv
+
