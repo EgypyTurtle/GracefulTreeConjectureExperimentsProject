@@ -238,6 +238,15 @@ vertex and assigns edge differences from large to small while keeping the
 search connected to already labeled branch structure. This solved the final
 22 cases in `0.053s`.
 
+The `branch` method should be described cautiously: it is not a proved
+constructive algorithm for all non-spider 5-leaf trees. It is a specialized
+branch-oriented search heuristic implemented for these experiments. The method
+combines standard graceful-labeling search ideas, including fixing label `0` at
+a structurally important vertex, placing large edge differences first, and
+expanding along the reduced branch structure. In these computations, it
+substantially outperformed the earlier generic hybrid search on the hard
+three-branch cases.
+
 Additional branch-method results:
 
 ```text
@@ -271,6 +280,7 @@ edges <= 15: 2319 cases
 edges <= 20: 20119 cases
 edges <= 25: 104885 cases
 edges <= 30: 399052 cases
+edges <= 35: 1225773 cases
 ```
 
 Completed edge-count-bounded run:
@@ -285,6 +295,22 @@ hardest = fiveleaf2e-30-6-2-19-1-1-1
 hardest nodes = 139060
 hardest elapsed = 1.755366s
 total wall time reported by user ~= 2500s
+```
+
+Completed edge-count-bounded run:
+
+```text
+edges <= 35
+cases = 1225773
+method = branch
+initial solved = 1225772
+initial timeouts = 1
+replay solved = 1
+final solved = 1225773
+final timeouts = 0
+timeout/replay case = fiveleaf2e-35-2-1-1-9-11-11
+replay nodes = 717624
+replay elapsed = 11.020516s
 ```
 
 This family is a better next computational target than larger 5-leg spiders.

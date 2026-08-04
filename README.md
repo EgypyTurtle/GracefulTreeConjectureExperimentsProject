@@ -29,6 +29,7 @@ Non-spider 5-leaf trees:
   max segment <= 6: 55062 / 55062 solved
   max segment <= 7: 151606 / 151606 solved
   edges <= 30: 399052 / 399052 solved
+  edges <= 35: 1225773 / 1225773 solved
 ```
 
 The 5-leg spider family is already covered by known theoretical results, so
