@@ -281,6 +281,7 @@ edges <= 20: 20119 cases
 edges <= 25: 104885 cases
 edges <= 30: 399052 cases
 edges <= 35: 1225773 cases
+edges <= 40: 3224679 cases
 ```
 
 Completed edge-count-bounded run:
@@ -311,6 +312,22 @@ final timeouts = 0
 timeout/replay case = fiveleaf2e-35-2-1-1-9-11-11
 replay nodes = 717624
 replay elapsed = 11.020516s
+```
+
+Completed edge-count-bounded run:
+
+```text
+edges <= 40
+cases = 3224679
+method = branch
+initial solved = 3224678
+initial timeouts = 1
+replay solved = 1
+final solved = 3224679
+final timeouts = 0
+timeout/replay case = fiveleaf2e-35-2-1-1-9-11-11
+replay nodes = 717624
+replay elapsed = 11.013337s
 ```
 
 This family is a better next computational target than larger 5-leg spiders.
