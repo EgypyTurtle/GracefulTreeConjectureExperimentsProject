@@ -38,10 +38,13 @@ Antimagic non-spider 5-leaf trees:
   edges <= 20: 20119 / 20119 solved
   edges <= 25: 104885 / 104885 solved
   edges <= 35: 1225773 / 1225773 solved
+  edges <= 40: 3224679 / 3224679 solved
+  edges <= 45: 7543822 / 7543822 solved
 ```
 
 The 5-leg spider family is already covered by known theoretical results, so
-the more interesting current direction is the non-spider 5-leaf family.
+the more interesting current direction is the non-spider 5-leaf family and
+hard-pattern behavior in labeling search.
 
 ## Requirements
 
