@@ -330,4 +330,131 @@ replay nodes = 717624
 replay elapsed = 11.013337s
 ```
 
+## 7. Second Case Study: Antimagic Labeling
+
+An antimagic labeling of a graph with `m` edges is a bijection from the edge set
+to `1,2,...,m` such that the induced vertex sums are pairwise distinct.
+Hartsfield and Ringel conjectured that every connected graph other than `K2` is
+antimagic; the tree version of this conjecture remains open.
+
+The antimagic search tool `src/antimagic_tree.py` reuses the non-spider 5-leaf
+enumerators and applies a branch-oriented edge-label search. This is a second
+case study in structure-aware labeling search.
+
+Current antimagic results:
+
+```text
+non-spider 5-leaf trees, edges <= 10
+cases = 100
+solved = 100
+timeouts = 0
+
+non-spider 5-leaf trees, edges <= 20
+cases = 20119
+solved = 20119
+timeouts = 0
+hardest = fiveleaf3e-20-3-12-1-1-1-1-1
+hardest nodes = 59510
+hardest elapsed = 1.396441s
+
+non-spider 5-leaf trees, edges <= 25
+cases = 104885
+initial solved = 104883
+initial timeouts = 2
+replay solved = 2
+final solved = 104885
+final timeouts = 0
+
+non-spider 5-leaf trees, edges <= 35
+cases = 1225773
+solved = 1225773
+timeouts = 0
+hardest = fiveleaf3e-26-2-19-1-1-1-1-1
+hardest nodes = 517612
+hardest elapsed = 7.472580s
+```
+
+For the larger `edges <= 40` run, the deterministic search solved 3,224,674
+of 3,224,679 cases. The five initial timeouts were then replayed with a
+randomized search order. All five were solved within a total fallback budget
+of 60 seconds per case, with the complete five-case replay taking about 18
+seconds. The largest observed randomized search used only 270 nodes.
+
+The five cases were concentrated in one three-branch family. Three cases with
+38 edges remained unsolved after a deterministic 60-second replay, while two
+40-edge cases were solved after roughly 23 seconds. A six-trial randomized
+replay solved all five, showing that the initial timeouts were caused mainly by
+search-order sensitivity rather than evidence against antimagic labelability.
+
+The antimagic solver now supports a two-stage mode: run the deterministic
+search first, and invoke randomized trials only after a timeout. The CSV log
+records primary and fallback node counts separately. This keeps the cost of
+large scans low while making the hard-pattern treatment reproducible.
+
+The current antimagic result should therefore be stated as:
+
+```text
+non-spider 5-leaf trees, edges <= 40
+cases = 3224679
+final solved = 3224679
+final timeouts = 0
+initial deterministic timeouts = 5
+randomized fallback solved = 5
+```
+
+The subsequent `edges <= 45` antimagic run extended this result substantially:
+
+```text
+cases = 7543822
+final solved = 7543822
+final timeouts = 0
+fallback cases = 552
+fallback failures = 0
+reported wall time ~= 40000s
+average throughput ~= 188.6 cases/s
+hardest recorded case = fiveleaf3e-41-3-7-1-1-4-1-24
+hardest nodes = 679241
+hardest elapsed = 20.103476s
+```
+
+The fallback was used only on a small fraction of the enumeration and solved
+all 552 cases that reached it. This gives a complete computational result for
+the enumerated non-spider five-leaf family through 45 edges, subject to the
+implementation and independent verification checks described below.
+
+The two initial `edges <= 25` antimagic timeouts were:
+
+```text
+fiveleaf2e-24-19-1-1-1-1-1
+fiveleaf3e-25-1-19-1-1-1-1-1
+```
+
+Both are extreme broom-like trees with a long internal path and five unit leaf
+segments. They were solved by increasing the per-case time limit from `5s` to
+`30s`; the harder replay took `9.301829s`.
+
+For `edges <= 35`, no timeouts occurred with the `30s` limit. The hardest cases
+remained concentrated in the same broom-like family: a long internal path and
+several unit leaf segments. In this family, the antimagic search was
+substantially faster than the graceful search at comparable edge bounds.
+
 This family is a better next computational target than larger 5-leg spiders.
+
+## 8. Extension and Transfer Experiments
+
+We also tested whether an antimagic labeling for an `m`-edge tree can be
+reused for a related `(m+1)`-edge tree obtained by subdividing one reduced
+edge. The experiments included direct label transfer, bounded local
+permutation, boundary-aware local repair, multiple source labelings, label
+complementation, and multiple predecessor choices.
+
+The best observed coverage was:
+
+```text
+21 edges from 20-edge sources: 120 / 8798
+26 edges from 25-edge sources: 209 / 35050
+```
+
+Thus simple subdivision transfer is a useful auxiliary experiment but does
+not appear to provide a general recursive construction. Its main practical
+value is as a possible warm start or search-order heuristic.

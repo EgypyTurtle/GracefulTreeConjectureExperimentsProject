@@ -1,7 +1,7 @@
 # Graceful Tree Labeling Experiments
 
-Computational experiments for graceful labelings of trees, with emphasis on
-spider trees and bounded non-spider 5-leaf trees.
+Computational experiments for graceful and antimagic labelings of trees, with
+emphasis on spider trees and bounded non-spider 5-leaf trees.
 
 A graceful labeling of a tree with `m` edges assigns distinct vertex labels from
 `0..m` so that the absolute differences on the edges are exactly `1..m`.
@@ -9,6 +9,7 @@ A graceful labeling of a tree with `m` edges assigns distinct vertex labels from
 This repository contains:
 
 - A standalone Python search tool: `src/graceful_tree.py`.
+- A standalone antimagic search tool: `src/antimagic_tree.py`.
 - Dedicated search methods for spider trees and branch-structured trees.
 - Reproducible command lines for the experiments.
 - A technical report summarizing the current computations.
@@ -31,6 +32,12 @@ Non-spider 5-leaf trees:
   edges <= 30: 399052 / 399052 solved
   edges <= 35: 1225773 / 1225773 solved
   edges <= 40: 3224679 / 3224679 solved
+
+Antimagic non-spider 5-leaf trees:
+  edges <= 10: 100 / 100 solved
+  edges <= 20: 20119 / 20119 solved
+  edges <= 25: 104885 / 104885 solved
+  edges <= 35: 1225773 / 1225773 solved
 ```
 
 The 5-leg spider family is already covered by known theoretical results, so
@@ -44,6 +51,7 @@ Check the CLI:
 
 ```bash
 python src/graceful_tree.py --help
+python src/antimagic_tree.py --help
 ```
 
 ## Examples
@@ -72,6 +80,16 @@ Summarize a CSV log:
 
 ```bash
 python src/graceful_tree.py --summarize-log results/five_leaf_nonspider_max6_branch.csv
+```
+
+Run the antimagic case study on non-spider 5-leaf trees with at most 20 edges:
+
+```bash
+python src/antimagic_tree.py \
+  --five-leaf-nonspider-by-edges 20 \
+  --time-limit 5 \
+  --log results/antimagic_five_leaf_nonspider_edges20.csv \
+  --progress 1000
 ```
 
 Sweep all non-spider 5-leaf trees with at most 30 edges:
@@ -140,3 +158,13 @@ technical summary, known-result context, and experiment status.
 Full CSV logs can become large. This repository keeps a small example CSV under
 `examples/`. For larger runs, generate logs locally using the commands above or
 publish compressed result archives separately.
+
+The current antimagic workflow uses a deterministic search followed by a
+randomized fallback only for timeout cases. On the `edges <= 40` hard cases,
+this resolved all five initial timeouts and reduced the observed search from
+millions of deterministic nodes to a few hundred randomized nodes in the
+successful trials.
+
+The same workflow has now solved all `7,543,822` non-spider five-leaf trees
+with at most 45 edges. The run used randomized fallback on 552 cases and had
+no final timeouts.
