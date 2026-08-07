@@ -2,6 +2,31 @@
 
 Date: 2026-08-04
 
+## 0. Algorithmic Verification Protocol
+
+This project is organized as a certificate-producing search framework, not only
+as a collection of enumeration experiments. The working protocol is:
+
+```text
+expand the bounded non-spider five-leaf family
+  -> search for graceful or antimagic labelings
+  -> emit explicit labeling certificates in CSV rows
+  -> independently verify solved rows
+  -> replay timeout cases
+  -> classify hard cases by reduced-skeleton parameters
+  -> redesign search order, pruning, or fallback strategy
+```
+
+The current stopping rule is algorithmic: continue expanding the five-leaf
+family while new edge bounds are computationally feasible and while timeout
+cases produce useful search information. If several rounds of targeted
+hard-case optimization no longer improve the unresolved set, the project should
+move to a new family, such as six-leaf trees or another labeling conjecture.
+
+The independent verifier is `src/verify_certificates.py`. It checks solved rows
+without invoking the search algorithm. This separates the search heuristic from
+the certificate audit.
+
 ## 1. Problem
 
 A graceful labeling of a tree with `m` edges is an injective vertex labeling by

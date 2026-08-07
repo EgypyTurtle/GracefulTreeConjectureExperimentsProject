@@ -1,7 +1,7 @@
-# Graceful Tree Labeling Experiments
+# Graceful Tree Labeling Algorithmic Search
 
-Computational experiments for graceful and antimagic labelings of trees, with
-emphasis on spider trees and bounded non-spider 5-leaf trees.
+Certificate-producing search algorithms for graceful and antimagic labelings of
+trees, with emphasis on bounded non-spider 5-leaf trees.
 
 A graceful labeling of a tree with `m` edges assigns distinct vertex labels from
 `0..m` so that the absolute differences on the edges are exactly `1..m`.
@@ -10,9 +10,23 @@ This repository contains:
 
 - A standalone Python search tool: `src/graceful_tree.py`.
 - A standalone antimagic search tool: `src/antimagic_tree.py`.
+- An independent CSV certificate verifier: `src/verify_certificates.py`.
 - Dedicated search methods for spider trees and branch-structured trees.
-- Reproducible command lines for the experiments.
-- A technical report summarizing the current computations.
+- Reproducible command lines for expanding bounded tree families.
+- A technical report summarizing algorithms, certificates, and current results.
+
+The intended workflow is algorithmic rather than just enumerative:
+
+```text
+expand a bounded 5-leaf family
+  -> solve each case and emit a certificate
+  -> replay and analyze timeout cases
+  -> redesign the search order or fallback around the hard pattern
+  -> repeat until the current family stops producing useful algorithmic data
+```
+
+For solved rows, the CSV log contains the tree and a labeling certificate. The
+verifier checks those rows without using the search algorithm.
 
 ## Highlights
 
@@ -55,6 +69,7 @@ Check the CLI:
 ```bash
 python src/graceful_tree.py --help
 python src/antimagic_tree.py --help
+python src/verify_certificates.py --help
 ```
 
 ## Examples
@@ -85,6 +100,14 @@ Summarize a CSV log:
 python src/graceful_tree.py --summarize-log results/five_leaf_nonspider_max6_branch.csv
 ```
 
+Verify graceful certificates from a CSV log:
+
+```bash
+python src/verify_certificates.py \
+  --kind graceful \
+  --log results/five_leaf_nonspider_edges40_branch.csv
+```
+
 Run the antimagic case study on non-spider 5-leaf trees with at most 20 edges:
 
 ```bash
@@ -93,6 +116,14 @@ python src/antimagic_tree.py \
   --time-limit 5 \
   --log results/antimagic_five_leaf_nonspider_edges20.csv \
   --progress 1000
+```
+
+Verify antimagic certificates from a CSV log:
+
+```bash
+python src/verify_certificates.py \
+  --kind antimagic \
+  --log results/antimagic_five_leaf_nonspider_edges45_fallback.csv
 ```
 
 Sweep all non-spider 5-leaf trees with at most 30 edges:
@@ -150,6 +181,28 @@ for reports and articles.
 The `branch` method is the key method for the non-spider 5-leaf computations.
 It fixes label `0` at a branch vertex, then assigns large edge differences
 while expanding through already labeled branch structure.
+
+For antimagic labeling, the current framework uses deterministic branch-first
+edge-label search and, only after a primary timeout, randomized fallback trials.
+This makes timeouts useful diagnostic objects: when a case is hard, it is
+replayed, structurally classified, and used to tune the next search order.
+
+## Certificates
+
+The search tools write CSV rows containing:
+
+```text
+case name
+vertex count
+edge list
+labeling certificate
+search statistics
+```
+
+For graceful rows, the certificate is a list of vertex labels. For antimagic
+rows, the certificate is a list of edge labels in the same order as the edge
+list. `src/verify_certificates.py` independently checks solved rows and ignores
+unsolved rows, so partial logs from interrupted long runs can still be audited.
 
 ## Report
 

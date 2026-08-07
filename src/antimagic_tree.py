@@ -213,6 +213,18 @@ def solve_antimagic_branch(
     return None, stats
 
 
+def load_solved_cases(path: str) -> set[str]:
+    solved: set[str] = set()
+    with open(path, "r", encoding="utf-8", newline="") as f:
+        for row in csv.DictReader(f):
+            case_name = row.get("case", "")
+            if not case_name or "\x00" in case_name:
+                continue
+            if row.get("solved") == "1":
+                solved.add(case_name)
+    return solved
+
+
 def run_cases(cases: Iterable[tuple[str, int, list[Edge]]], args: argparse.Namespace) -> int:
     fieldnames = [
         "case",
@@ -230,6 +242,8 @@ def run_cases(cases: Iterable[tuple[str, int, list[Edge]]], args: argparse.Names
         "edges",
         "edge_labels",
     ]
+    skip_solved = load_solved_cases(args.skip_solved_from) if args.skip_solved_from else set()
+    skipped = 0
     solved = 0
     timeouts = 0
     checked = 0
@@ -240,6 +254,9 @@ def run_cases(cases: Iterable[tuple[str, int, list[Edge]]], args: argparse.Names
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for case_name, n, edges in cases:
+            if case_name in skip_solved:
+                skipped += 1
+                continue
             adj = build_adj(n, edges)
             assert_tree(n, edges, adj)
             labels = None
@@ -327,10 +344,13 @@ def run_cases(cases: Iterable[tuple[str, int, list[Edge]]], args: argparse.Names
                 rate = checked / max(time.time() - started, 1e-9)
                 print(
                     f"case {checked}: solved={solved}, timeouts={timeouts}, "
-                    f"hardest_nodes={best_nodes}, rate={rate:.2f}/s"
+                    f"skipped={skipped}, hardest_nodes={best_nodes}, rate={rate:.2f}/s"
                 )
     elapsed_total = time.time() - started
-    print(f"complete: checked={checked}, solved={solved}, timeouts={timeouts}, elapsed={elapsed_total:.3f}s")
+    print(
+        f"complete: checked={checked}, solved={solved}, timeouts={timeouts}, "
+        f"skipped={skipped}, elapsed={elapsed_total:.3f}s"
+    )
     print(f"log: {args.log}")
     print(f"hardest_nodes={best_nodes}, hardest_elapsed={best_elapsed:.6f}s")
     return 0 if timeouts == 0 else 2
@@ -385,6 +405,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--random-seed", type=int, default=20260805)
     parser.add_argument("--random-fallback-trials", type=int, default=0, help="random trials only after primary timeout")
     parser.add_argument("--random-fallback-time", type=float, default=60, help="total fallback time per case")
+    parser.add_argument("--skip-solved-from", help="CSV log whose solved case names should be skipped")
     args = parser.parse_args(argv)
 
     if args.summarize_log:

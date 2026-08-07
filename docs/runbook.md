@@ -1,25 +1,27 @@
 # Runbook
 
-These commands assume PowerShell on Windows.
+These commands assume PowerShell on Windows and are run from the repository
+root.
 
 ## Setup
 
 ```powershell
-cd "C:\Users\56257\Documents\Codex\2026-07-31\new-chat\graceful-tree-labeling-experiments"
+cd path\to\GracefulTree
 
 New-Item -ItemType Directory -Force -Path ".\results" | Out-Null
 ```
 
-Use the bundled Python from Codex:
-
-```powershell
-$PY = "C:\Users\56257\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
-```
-
-Or use any local Python 3.10+:
+Use any local Python 3.10+:
 
 ```powershell
 $PY = "python"
+```
+
+If you are using a managed environment with a bundled Python, set `$PY` to that
+interpreter path locally. Do not commit machine-specific absolute paths.
+
+```powershell
+$PY = "path\to\python.exe"
 ```
 
 ## Smoke Test
@@ -54,6 +56,24 @@ checked=66, solved=66, timeouts=0
 
 ```powershell
 & $PY ".\src\graceful_tree.py" --summarize-log ".\results\five_leaf_nonspider_max6_branch.csv"
+```
+
+## Verify Certificates
+
+Solved CSV rows are certificates. Verify graceful rows with:
+
+```powershell
+& $PY ".\src\verify_certificates.py" `
+  --kind graceful `
+  --log ".\results\five_leaf_nonspider_edges40_branch.csv"
+```
+
+Verify antimagic rows with:
+
+```powershell
+& $PY ".\src\verify_certificates.py" `
+  --kind antimagic `
+  --log ".\results\antimagic_five_leaf_nonspider_edges45_fallback.csv"
 ```
 
 ## Replay Unsolved Cases
@@ -108,3 +128,21 @@ Replay only the unresolved rows from an existing run:
   --log ".\results\antimagic_five_leaf_nonspider_edges40_fallback.csv" `
   --progress 1
 ```
+
+Resume an interrupted antimagic run by skipping solved rows already present in
+an earlier log and writing the remaining cases to a new continuation log:
+
+```powershell
+& $PY ".\src\antimagic_tree.py" `
+  --five-leaf-nonspider-by-edges 50 `
+  --time-limit 10 `
+  --random-fallback-trials 6 `
+  --random-fallback-time 60 `
+  --random-seed 20260805 `
+  --skip-solved-from ".\results\antimagic_five_leaf_nonspider_edges50_fallback.csv" `
+  --log ".\results\antimagic_five_leaf_nonspider_edges50_continuation.csv" `
+  --progress 20000
+```
+
+The continuation command should report a nonzero `skipped=...` count after the
+first progress update.
