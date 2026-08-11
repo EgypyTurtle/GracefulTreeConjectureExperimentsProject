@@ -47,10 +47,13 @@ def positive_tuples(parts: int, total: int) -> Iterable[tuple[int, ...]]:
             yield (first, *rest)
 
 
-def five_leaf_nonspider_by_edges_cases(max_edges: int) -> Iterable[tuple[str, int, list[Edge]]]:
+def five_leaf_nonspider_by_edges_cases(max_edges: int, min_edges: int = 6) -> Iterable[tuple[str, int, list[Edge]]]:
     if max_edges < 6:
         raise ValueError("non-spider 5-leaf trees need at least 6 edges")
-    for total_edges in range(6, max_edges + 1):
+    min_edges = max(6, min_edges)
+    if min_edges > max_edges:
+        raise ValueError("--min-edges cannot exceed --five-leaf-nonspider-by-edges")
+    for total_edges in range(min_edges, max_edges + 1):
         for lengths in positive_tuples(6, total_edges):
             bridge = lengths[0]
             left = tuple(sorted(lengths[1:3]))
@@ -405,6 +408,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--random-seed", type=int, default=20260805)
     parser.add_argument("--random-fallback-trials", type=int, default=0, help="random trials only after primary timeout")
     parser.add_argument("--random-fallback-time", type=float, default=60, help="total fallback time per case")
+    parser.add_argument("--min-edges", type=int, default=6, help="first edge count for --five-leaf-nonspider-by-edges")
     parser.add_argument("--skip-solved-from", help="CSV log whose solved case names should be skipped")
     args = parser.parse_args(argv)
 
@@ -413,7 +417,7 @@ def main(argv: list[str]) -> int:
     if args.replay_unsolved:
         return run_replay_unsolved(args)
     if args.five_leaf_nonspider_by_edges is not None:
-        return run_cases(five_leaf_nonspider_by_edges_cases(args.five_leaf_nonspider_by_edges), args)
+        return run_cases(five_leaf_nonspider_by_edges_cases(args.five_leaf_nonspider_by_edges, args.min_edges), args)
     edges = read_edges(args.edges)
     n = 1 + max(max(u, v) for u, v in edges)
     return run_cases((("input", n, edges),), args)

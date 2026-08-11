@@ -272,6 +272,14 @@ expanding along the reduced branch structure. In these computations, it
 substantially outperformed the earlier generic hybrid search on the hard
 three-branch cases.
 
+The later `compressed` method adds two proved constructive ingredients. First,
+it recognizes caterpillars and emits their standard alpha-labeling in linear
+time. Second, if a smaller rooted base has a graceful labeling with a selected
+leaf at an extremal label, it rebuilds an arbitrarily long pendant path while
+preserving gracefulness. Isomorphic rooted bases share cached certificates.
+This public snapshot records the operational use and ablation data; detailed
+proof notes are intentionally deferred to a later revision.
+
 Additional branch-method results:
 
 ```text
@@ -354,6 +362,49 @@ timeout/replay case = fiveleaf2e-35-2-1-1-9-11-11
 replay nodes = 717624
 replay elapsed = 11.013337s
 ```
+
+The interrupted and resumed graceful run through 45 edges has also completed:
+
+```text
+edges <= 45
+unique cases = 7543822
+final solved = 7543822
+final timeouts = 0
+initial 41-edge timeouts = 14
+hardest solved case = fiveleaf2e-44-2-1-1-11-11-18
+hardest nodes = 8170470
+hardest elapsed = 171.891746s
+```
+
+The main and continuation logs contain 14 overlapping rows because each
+initial timeout was replayed. After removing that overlap, the per-edge counts
+match the independent enumeration exactly. All 5,624 solved certificates whose
+successful run took more than one second were independently rechecked, with no
+invalid certificate found.
+
+The subsequent compressed runs extended the graceful computation:
+
+```text
+exact edge 46: 1,293,708 / 1,293,708 solved
+exact edge 47: 1,479,480 / 1,479,482 solved
+exact edges 48-50: 5,780,094 / 5,780,094 solved
+```
+
+The 48-50 run used the persistent rooted-certificate database. The raw
+5,780,094 cases produced 2,166,443 distinct rooted reduction bases, a 62.5%
+reduction in distinct base instances. The strategy counts were:
+
+```text
+pendant-extension-disk-cache       4,625,696
+pendant-extension-cache              200,000
+caterpillar                           24,289
+pendant-extension                    765,534
+pendant-extension+branch             164,575
+```
+
+The run took approximately 4 hours 56 minutes of wall time and had no final
+timeouts. These figures measure the search framework and its certificate
+reuse; they do not constitute a proof of the Graceful Tree Conjecture.
 
 ## 7. Second Case Study: Antimagic Labeling
 
@@ -446,6 +497,46 @@ The fallback was used only on a small fraction of the enumeration and solved
 all 552 cases that reached it. This gives a complete computational result for
 the enumerated non-spider five-leaf family through 45 edges, subject to the
 implementation and independent verification checks described below.
+
+The next run, `edges <= 50`, was interrupted by a system restart and then
+resumed using solved-row checkpoint skipping. The first log contains one
+trailing corrupted NUL row caused by the interruption; this row is ignored by
+the resume and certificate-verification tools. The valid rows across the
+checkpoint and continuation logs are:
+
+```text
+checkpoint valid rows = 2380844
+continuation valid rows = 13716262
+total valid rows = 16097106
+final solved = 16097106
+final timeouts = 0
+fallback cases = 988
+fallback failures = 0
+hardest recorded case = fiveleaf3e-41-3-7-1-1-4-1-24
+hardest nodes = 757728
+hardest elapsed = 20.086924s
+```
+
+The hardest `edges <= 50` row used both the primary deterministic search and
+randomized fallback:
+
+```text
+primary nodes = 399621
+fallback nodes = 358107
+random trials used = 2
+```
+
+The checkpoint log was independently certificate-verified:
+
+```text
+checked solved rows = 2380844
+skipped corrupted/interrupted rows = 1
+bad certificates = 0
+```
+
+The continuation log is substantially larger and should be certificate-verified
+as a separate long audit before being cited as independently audited in a paper
+draft.
 
 The two initial `edges <= 25` antimagic timeouts were:
 

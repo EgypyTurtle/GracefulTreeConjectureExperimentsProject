@@ -12,6 +12,8 @@ This repository contains:
 - A standalone antimagic search tool: `src/antimagic_tree.py`.
 - An independent CSV certificate verifier: `src/verify_certificates.py`.
 - Dedicated search methods for spider trees and branch-structured trees.
+- Constructive compression using caterpillar alpha-labelings, extremal
+  pendant-path extension, and rooted-certificate reuse.
 - Reproducible command lines for expanding bounded tree families.
 - A technical report summarizing algorithms, certificates, and current results.
 
@@ -46,6 +48,10 @@ Non-spider 5-leaf trees:
   edges <= 30: 399052 / 399052 solved
   edges <= 35: 1225773 / 1225773 solved
   edges <= 40: 3224679 / 3224679 solved
+  edges <= 45: 7543822 / 7543822 solved
+  edges = 46: 1293708 / 1293708 solved
+  edges = 47: 1479480 / 1479482 solved (2 unresolved)
+  edges = 48-50: 5780094 / 5780094 solved
 
 Antimagic non-spider 5-leaf trees:
   edges <= 10: 100 / 100 solved
@@ -54,6 +60,7 @@ Antimagic non-spider 5-leaf trees:
   edges <= 35: 1225773 / 1225773 solved
   edges <= 40: 3224679 / 3224679 solved
   edges <= 45: 7543822 / 7543822 solved
+  edges <= 50: 16097106 / 16097106 solved
 ```
 
 The 5-leg spider family is already covered by known theoretical results, so
@@ -139,6 +146,18 @@ python src/graceful_tree.py \
   --progress 5000
 ```
 
+Run the constructive compression method on a new edge interval:
+
+```bash
+python src/graceful_tree.py \
+  --five-leaf-nonspider-by-edges 47 \
+  --min-edges 46 \
+  --method compressed \
+  --time-limit 300 \
+  --log results/five_leaf_nonspider_edges46_47_compressed.csv \
+  --progress 20000
+```
+
 ## Tree Families
 
 ### Spider Trees
@@ -175,12 +194,36 @@ for reports and articles.
 - `diff`: backtracking by edge differences from large to small.
 - `spider`: spider-specific difference search.
 - `branch`: branch-oriented difference search for multi-branch trees.
+- `compressed`: caterpillar construction, rooted pendant-path reduction,
+  cached base certificates, and `branch` fallback.
 - `heuristic`: randomized local search.
 - `hybrid`: tries structural methods and then generic methods.
 
 The `branch` method is the key method for the non-spider 5-leaf computations.
 It fixes label `0` at a branch vertex, then assigns large edge differences
 while expanding through already labeled branch structure.
+
+The `compressed` method turns one extremal-leaf base certificate into
+certificates for longer pendant paths. New logs record `strategy`,
+`reduction_base`, and `extended_edges` so the reduction chain remains
+auditable. By default, rooted certificates are also persisted in
+`results/pendant_extension_cache.sqlite3`; the in-memory cache is only a
+speed layer and is limited by `--extension-cache-size`. See
+[docs/current_results.md](docs/current_results.md) for the current reduction
+statistics and the complete `edges <= 20` ablation. Detailed proof notes are
+intentionally not part of this snapshot.
+
+Recoverable certificates from older compressed CSV logs can be imported with
+`--import-extension-cache`; this lets later runs reuse certificates after a
+restart. The importer validates the recovered rooted certificate before
+inserting it, so it can also extract compatible certificates from older logs
+that do not record a search strategy.
+
+The latest compressed 48-50 run enumerated 5,780,094 trees but recorded only
+2,166,443 distinct rooted reduction bases. The run completed with no timeout,
+and took about 4 hours 56 minutes. See
+[docs/current_results.md](docs/current_results.md) for the strategy breakdown
+and the comparison with the uncompressed branch search.
 
 For antimagic labeling, the current framework uses deterministic branch-first
 edge-label search and, only after a primary timeout, randomized fallback trials.
@@ -208,6 +251,9 @@ unsolved rows, so partial logs from interrupted long runs can still be audited.
 
 See [docs/technical_report.md](docs/technical_report.md) for the current
 technical summary, known-result context, and experiment status.
+The concise public result summary is in
+[docs/current_results.md](docs/current_results.md).
+Detailed constructive proof notes are being kept for a later revision.
 
 ## Data Policy
 
@@ -224,3 +270,8 @@ successful trials.
 The same workflow has now solved all `7,543,822` non-spider five-leaf trees
 with at most 45 edges. The run used randomized fallback on 552 cases and had
 no final timeouts.
+
+The antimagic `edges <= 50` run was resumed from its solved-row checkpoint and
+contains `16,097,106` valid solved rows. The separate graceful 48-50
+compressed run contains `5,780,094` solved rows and is summarized in
+`docs/current_results.md`.

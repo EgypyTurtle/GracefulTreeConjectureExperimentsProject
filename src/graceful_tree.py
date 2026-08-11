@@ -10,17 +10,192 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
+import heapq
 import math
 import random
+import sqlite3
 import sys
 import time
-from collections import deque
+from collections import Counter, deque
 from dataclasses import dataclass
 from itertools import combinations_with_replacement
+from pathlib import Path
 from typing import Iterable
 
 
 Edge = tuple[int, int]
+
+
+_PENDANT_EXTENSION_CACHE: dict[str, tuple[int, ...]] = {}
+_PENDANT_EXTENSION_DB: sqlite3.Connection | None = None
+_PENDANT_EXTENSION_DB_PATH: str | None = None
+
+
+def open_pendant_extension_cache(path: str) -> sqlite3.Connection:
+    """Open the persistent rooted-certificate cache, creating its schema."""
+    global _PENDANT_EXTENSION_DB, _PENDANT_EXTENSION_DB_PATH
+    resolved = str(Path(path).resolve())
+    if _PENDANT_EXTENSION_DB is not None and _PENDANT_EXTENSION_DB_PATH == resolved:
+        return _PENDANT_EXTENSION_DB
+    close_pendant_extension_cache()
+    Path(resolved).parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(resolved, timeout=30)
+    connection.execute("PRAGMA journal_mode=WAL")
+    connection.execute("PRAGMA synchronous=NORMAL")
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS rooted_certificates (
+            cache_key TEXT PRIMARY KEY,
+            labels TEXT NOT NULL,
+            vertex_count INTEGER NOT NULL,
+            created_at REAL NOT NULL
+        )
+        """
+    )
+    connection.commit()
+    _PENDANT_EXTENSION_DB = connection
+    _PENDANT_EXTENSION_DB_PATH = resolved
+    return connection
+
+
+def close_pendant_extension_cache() -> None:
+    """Flush and close the current persistent cache connection."""
+    global _PENDANT_EXTENSION_DB, _PENDANT_EXTENSION_DB_PATH
+    if _PENDANT_EXTENSION_DB is not None:
+        _PENDANT_EXTENSION_DB.commit()
+        _PENDANT_EXTENSION_DB.close()
+    _PENDANT_EXTENSION_DB = None
+    _PENDANT_EXTENSION_DB_PATH = None
+    persistent_cache_put.pending = 0
+
+
+def persistent_cache_get(cache_key: str, cache_size: int) -> tuple[int, ...] | None:
+    if _PENDANT_EXTENSION_DB is None:
+        return None
+    row = _PENDANT_EXTENSION_DB.execute(
+        "SELECT labels FROM rooted_certificates WHERE cache_key = ?",
+        (cache_key,),
+    ).fetchone()
+    if row is None:
+        return None
+    labels = tuple(int(value) for value in row[0].split(","))
+    if cache_size > 0 and len(_PENDANT_EXTENSION_CACHE) < cache_size:
+        _PENDANT_EXTENSION_CACHE[cache_key] = labels
+    return labels
+
+
+def persistent_cache_put(cache_key: str, labels: tuple[int, ...]) -> bool:
+    if _PENDANT_EXTENSION_DB is None:
+        return False
+    cursor = _PENDANT_EXTENSION_DB.execute(
+        """
+        INSERT OR IGNORE INTO rooted_certificates
+            (cache_key, labels, vertex_count, created_at)
+        VALUES (?, ?, ?, ?)
+        """,
+        (cache_key, ",".join(map(str, labels)), len(labels), time.time()),
+    )
+    # A small batch keeps the common case fast without losing the whole cache
+    # on a normal interrupted run.
+    inserted = cursor.rowcount == 1
+    if inserted:
+        persistent_cache_put.pending += 1
+    if persistent_cache_put.pending >= 256:
+        _PENDANT_EXTENSION_DB.commit()
+        persistent_cache_put.pending = 0
+    return inserted
+
+
+persistent_cache_put.pending = 0
+
+
+def reduced_certificate_from_full_labels(
+    adj: list[list[int]],
+    full_labels: list[int],
+) -> tuple[str, tuple[int, ...]] | None:
+    """Recover the rooted base certificate used by pendant extension."""
+    candidates = [path for path in pendant_paths(adj) if len(path) > 2]
+    if not candidates or len(full_labels) != len(adj):
+        return None
+    path = max(candidates, key=lambda item: (len(item), -item[-1]))
+    removed_count = len(path) - 2
+    removed = set(path[2:])
+    kept = [u for u in range(len(adj)) if u not in removed]
+    old_to_new = {old: new for new, old in enumerate(kept)}
+    reduced_edges = [
+        (old_to_new[u], old_to_new[v])
+        for u in kept
+        for v in adj[u]
+        if u < v and v in old_to_new
+    ]
+    reduced_adj = build_adj(len(kept), reduced_edges)
+    working = list(full_labels)
+    base_edge_count = len(kept) - 1
+
+    # Undo the extension steps in reverse order.  A newly added leaf is either
+    # the new maximum, or the preceding labels were shifted up and it is 0.
+    for step in range(removed_count - 1, -1, -1):
+        new_vertex = path[2 + step]
+        new_label = working[new_vertex]
+        current_edges = base_edge_count + step
+        if new_label == current_edges + 1:
+            pass
+        elif new_label == 0:
+            previous_vertices = kept + path[2 : 2 + step]
+            for vertex in previous_vertices:
+                working[vertex] -= 1
+        else:
+            return None
+        working[new_vertex] = -1
+
+    reduced_leaf = old_to_new[path[1]]
+    cache_key, canonical_order = rooted_canonical_order(reduced_adj, reduced_leaf)
+    reduced_labels = [working[old_vertex] for old_vertex in kept]
+    base_labels = tuple(reduced_labels[vertex] for vertex in canonical_order)
+    if sorted(base_labels) != list(range(base_edge_count + 1)):
+        return None
+    if not verify_labeling(reduced_edges, reduced_labels):
+        return None
+    return cache_key, base_labels
+
+
+def import_pendant_extension_cache_logs(paths: list[str], cache_db: str) -> int:
+    """Import recoverable pendant-extension certificates from CSV logs."""
+    open_pendant_extension_cache(cache_db)
+    imported = 0
+    eligible = 0
+    skipped = 0
+    for path in paths:
+        with open(path, "r", encoding="utf-8", newline="", errors="replace") as source:
+            for row in csv.DictReader(source):
+                if any("\x00" in (row.get(field) or "") for field in ("case", "strategy", "labels")):
+                    skipped += 1
+                    continue
+                if row.get("solved") != "1":
+                    continue
+                eligible += 1
+                try:
+                    n = int(row["vertices"])
+                    edges = parse_edge_string(row["edges"])
+                    labels = [int(value) for value in row["labels"].split()]
+                    if len(labels) != n:
+                        raise ValueError("label count does not match vertex count")
+                    result = reduced_certificate_from_full_labels(build_adj(n, edges), labels)
+                    if result is None:
+                        raise ValueError("could not recover reduced certificate")
+                    cache_key, base_labels = result
+                    expected_base = hashlib.sha256(cache_key.encode("ascii")).hexdigest()[:16]
+                    if row.get("reduction_base") and row["reduction_base"] != expected_base:
+                        raise ValueError("reduction base hash mismatch")
+                except (KeyError, ValueError, IndexError):
+                    skipped += 1
+                    continue
+                imported += int(persistent_cache_put(cache_key, base_labels))
+    close_pendant_extension_cache()
+    print(f"cache import: eligible={eligible}, imported={imported}, skipped={skipped}")
+    print(f"cache database: {cache_db}")
+    return 0
 
 
 @dataclass
@@ -28,6 +203,9 @@ class SearchStats:
     nodes: int = 0
     backtracks: int = 0
     started_at: float = 0.0
+    strategy: str = "search"
+    reduction_base: str = ""
+    extended_edges: int = 0
 
 
 def read_edges(path: str) -> list[Edge]:
@@ -278,7 +456,7 @@ def solve_graceful(
 ) -> tuple[list[int] | None, SearchStats]:
     n = len(adj)
     m = n - 1
-    stats = SearchStats(started_at=time.time())
+    stats = SearchStats(started_at=time.time(), strategy="exact")
     rng = random.Random(seed)
 
     def timed_out() -> bool:
@@ -426,7 +604,7 @@ def solve_graceful_heuristic(
 ) -> tuple[list[int] | None, SearchStats]:
     n = len(adj)
     m = n - 1
-    stats = SearchStats(started_at=time.time())
+    stats = SearchStats(started_at=time.time(), strategy="heuristic")
     rng = random.Random(seed)
     edges = [(u, v) for u in range(n) for v in adj[u] if u < v]
 
@@ -482,7 +660,7 @@ def solve_graceful_by_differences(
 ) -> tuple[list[int] | None, SearchStats]:
     n = len(adj)
     m = n - 1
-    stats = SearchStats(started_at=time.time())
+    stats = SearchStats(started_at=time.time(), strategy="diff")
     rng = random.Random(seed)
     edges = [(u, v) for u in range(n) for v in adj[u] if u < v]
     edge_order = sorted(range(m), key=lambda i: -(len(adj[edges[i][0]]) + len(adj[edges[i][1]])))
@@ -589,18 +767,27 @@ def solve_graceful_branch_differences(
     time_limit: float | None = None,
     seed: int | None = None,
     max_candidates_per_diff: int | None = None,
+    fixed_zero_vertex: int | None = None,
+    max_nodes: int | None = None,
 ) -> tuple[list[int] | None, SearchStats]:
     n = len(adj)
     m = n - 1
-    stats = SearchStats(started_at=time.time())
+    stats = SearchStats(started_at=time.time(), strategy="branch")
     rng = random.Random(seed)
     edges = [(u, v) for u in range(n) for v in adj[u] if u < v]
     branch_vertices = [u for u in range(n) if len(adj[u]) >= 3]
-    root_candidates = sorted(branch_vertices or range(n), key=lambda u: (-len(adj[u]), u))
-    if seed is not None:
+    if fixed_zero_vertex is not None:
+        if not 0 <= fixed_zero_vertex < n:
+            raise ValueError("fixed zero vertex is outside the graph")
+        root_candidates = [fixed_zero_vertex]
+    else:
+        root_candidates = sorted(branch_vertices or range(n), key=lambda u: (-len(adj[u]), u))
+    if seed is not None and fixed_zero_vertex is None:
         rng.shuffle(root_candidates)
 
     def timed_out() -> bool:
+        if max_nodes is not None and stats.nodes >= max_nodes:
+            return True
         return time_limit is not None and time.time() - stats.started_at >= time_limit
 
     def dist_from_roots(roots: list[int]) -> list[int]:
@@ -708,6 +895,187 @@ def solve_graceful_branch_differences(
     return None, stats
 
 
+def pendant_paths(adj: list[list[int]]) -> list[list[int]]:
+    """Return maximal anchor-to-leaf paths whose internal vertices have degree 2."""
+    paths: list[list[int]] = []
+    for leaf in range(len(adj)):
+        if len(adj[leaf]) != 1:
+            continue
+        reverse_path = [leaf]
+        previous = -1
+        current = leaf
+        while True:
+            next_vertices = [v for v in adj[current] if v != previous]
+            if not next_vertices:
+                break
+            nxt = next_vertices[0]
+            reverse_path.append(nxt)
+            previous, current = current, nxt
+            if len(adj[current]) != 2:
+                break
+        paths.append(list(reversed(reverse_path)))
+    return paths
+
+
+def rooted_canonical_order(adj: list[list[int]], root: int) -> tuple[str, list[int]]:
+    """Return an AHU-style rooted-tree code and a compatible vertex order."""
+    def visit(vertex: int, parent: int) -> tuple[str, list[int]]:
+        children = [visit(child, vertex) for child in adj[vertex] if child != parent]
+        children.sort(key=lambda item: item[0])
+        code = "(" + "".join(child_code for child_code, _order in children) + ")"
+        order = [vertex]
+        for _child_code, child_order in children:
+            order.extend(child_order)
+        return code, order
+
+    return visit(root, -1)
+
+
+def solve_graceful_pendant_extension(
+    adj: list[list[int]],
+    max_nodes: int = 2_000,
+    time_limit: float | None = None,
+    cache_size: int = 100_000,
+    cache_db: str | None = None,
+) -> tuple[list[int] | None, SearchStats]:
+    """Reduce one pendant path to one edge, then rebuild it by extremal extension."""
+    started_at = time.time()
+    if cache_db:
+        open_pendant_extension_cache(cache_db)
+    candidates = [path for path in pendant_paths(adj) if len(path) > 2]
+    if not candidates:
+        return None, SearchStats(started_at=started_at, strategy="pendant-extension")
+    path = max(candidates, key=lambda item: (len(item), -item[-1]))
+    removed = set(path[2:])
+    kept = [u for u in range(len(adj)) if u not in removed]
+    old_to_new = {old: new for new, old in enumerate(kept)}
+    reduced_edges = [
+        (old_to_new[u], old_to_new[v])
+        for u in kept
+        for v in adj[u]
+        if u < v and v in old_to_new
+    ]
+    reduced_adj = build_adj(len(kept), reduced_edges)
+    reduced_leaf = old_to_new[path[1]]
+    cache_key, canonical_order = rooted_canonical_order(reduced_adj, reduced_leaf)
+    reduction_base = hashlib.sha256(cache_key.encode("ascii")).hexdigest()[:16]
+    cached_labels = _PENDANT_EXTENSION_CACHE.get(cache_key) if cache_size > 0 else None
+    cache_strategy = "pendant-extension-cache"
+    if cached_labels is None and cache_db:
+        cached_labels = persistent_cache_get(cache_key, cache_size)
+        if cached_labels is not None:
+            cache_strategy = "pendant-extension-disk-cache"
+    if cached_labels is not None:
+        labels = [-1] * len(kept)
+        for canonical_index, vertex in enumerate(canonical_order):
+            labels[vertex] = cached_labels[canonical_index]
+        stats = SearchStats(started_at=started_at, strategy=cache_strategy)
+    else:
+        labels, stats = solve_graceful_branch_differences(
+            reduced_adj,
+            time_limit=time_limit,
+            fixed_zero_vertex=reduced_leaf,
+            max_nodes=max_nodes,
+        )
+        stats.started_at = started_at
+        stats.strategy = "pendant-extension"
+        if labels is None:
+            stats.reduction_base = reduction_base
+            stats.extended_edges = len(path) - 2
+            return None, stats
+        if cache_size > 0 and len(_PENDANT_EXTENSION_CACHE) < cache_size:
+            _PENDANT_EXTENSION_CACHE[cache_key] = tuple(labels[vertex] for vertex in canonical_order)
+        persistent_cache_put(
+            cache_key,
+            tuple(labels[vertex] for vertex in canonical_order),
+        )
+    stats.reduction_base = reduction_base
+    stats.extended_edges = len(path) - 2
+
+    target_labels = [-1] * len(adj)
+    assigned: list[int] = []
+    for new_vertex, old_vertex in enumerate(kept):
+        target_labels[old_vertex] = labels[new_vertex]
+        assigned.append(old_vertex)
+
+    endpoint = path[1]
+    current_edges = len(kept) - 1
+    for new_vertex in path[2:]:
+        if target_labels[endpoint] == 0:
+            target_labels[new_vertex] = current_edges + 1
+        elif target_labels[endpoint] == current_edges:
+            for vertex in assigned:
+                target_labels[vertex] += 1
+            target_labels[new_vertex] = 0
+        else:
+            return None, stats
+        assigned.append(new_vertex)
+        endpoint = new_vertex
+        current_edges += 1
+    return target_labels, stats
+
+
+def solve_graceful_caterpillar(adj: list[list[int]]) -> tuple[list[int] | None, SearchStats]:
+    """Construct the standard alpha-labeling of a caterpillar in linear time."""
+    n = len(adj)
+    stats = SearchStats(started_at=time.time(), strategy="caterpillar")
+    if n == 0:
+        return None, stats
+    if n == 1:
+        return [0], stats
+
+    spine_vertices = [u for u in range(n) if len(adj[u]) > 1]
+    if not spine_vertices:
+        if n == 2 and adj[0] == [1] and adj[1] == [0]:
+            return [0, 1], stats
+        return None, stats
+
+    spine_set = set(spine_vertices)
+    spine_adj = {u: [v for v in adj[u] if v in spine_set] for u in spine_vertices}
+    if any(len(neighbors) > 2 for neighbors in spine_adj.values()):
+        return None, stats
+    if len(spine_vertices) == 1:
+        spine = spine_vertices
+    else:
+        endpoints = sorted(u for u in spine_vertices if len(spine_adj[u]) == 1)
+        if len(endpoints) != 2:
+            return None, stats
+        spine = []
+        previous = -1
+        current = endpoints[0]
+        while True:
+            spine.append(current)
+            next_vertices = [v for v in spine_adj[current] if v != previous]
+            if not next_vertices:
+                break
+            previous, current = current, next_vertices[0]
+        if len(spine) != len(spine_vertices):
+            return None, stats
+
+    low_order: list[int] = []
+    high_order: list[int] = []
+    for index, vertex in enumerate(spine):
+        leaves = sorted(v for v in adj[vertex] if v not in spine_set)
+        if any(len(adj[leaf]) != 1 for leaf in leaves):
+            return None, stats
+        if index % 2 == 0:
+            low_order.append(vertex)
+            high_order.extend(leaves)
+        else:
+            low_order.extend(leaves)
+            high_order.append(vertex)
+
+    if len(low_order) + len(high_order) != n:
+        return None, stats
+    labels = [-1] * n
+    for label, vertex in enumerate(low_order):
+        labels[vertex] = label
+    m = n - 1
+    for rank, vertex in enumerate(high_order):
+        labels[vertex] = m - rank
+    return labels, stats
+
+
 def spider_paths_from_adj(adj: list[list[int]]) -> tuple[int, list[list[int]]]:
     n = len(adj)
     centers = [u for u in range(n) if len(adj[u]) > 2]
@@ -739,7 +1107,7 @@ def solve_graceful_spider(
 ) -> tuple[list[int] | None, SearchStats]:
     n = len(adj)
     m = n - 1
-    stats = SearchStats(started_at=time.time())
+    stats = SearchStats(started_at=time.time(), strategy="spider")
     rng = random.Random(seed)
     center, paths = spider_paths_from_adj(adj)
     if leg_order == "long":
@@ -826,6 +1194,34 @@ def solve_graceful_spider(
 
 
 def solve_tree(adj: list[list[int]], args: argparse.Namespace, seed: int | None = None) -> tuple[list[int] | None, SearchStats]:
+    if not args.no_constructive_fastpath:
+        labels, stats = solve_graceful_caterpillar(adj)
+        if labels is not None:
+            return labels, stats
+    if args.method == "compressed":
+        labels, prefix_stats = solve_graceful_pendant_extension(
+            adj,
+            max_nodes=args.extension_fastpath_nodes,
+            cache_size=args.extension_cache_size,
+            cache_db=args.extension_cache_db,
+        )
+        if labels is not None:
+            return labels, prefix_stats
+        elapsed = time.time() - prefix_stats.started_at
+        remaining = None if args.time_limit is None else max(0.0, args.time_limit - elapsed)
+        labels, stats = solve_graceful_branch_differences(
+            adj,
+            time_limit=remaining,
+            seed=seed,
+            max_candidates_per_diff=args.diff_candidates,
+        )
+        stats.nodes += prefix_stats.nodes
+        stats.backtracks += prefix_stats.backtracks
+        stats.started_at = prefix_stats.started_at
+        stats.strategy = "pendant-extension+branch"
+        stats.reduction_base = prefix_stats.reduction_base
+        stats.extended_edges = prefix_stats.extended_edges
+        return labels, stats
     if args.method == "exact":
         return solve_graceful(adj, time_limit=args.time_limit, seed=seed)
     if args.method == "spider":
@@ -871,7 +1267,7 @@ def solve_tree(adj: list[list[int]], args: argparse.Namespace, seed: int | None 
         if args.time_limit is not None and time.time() - stats.started_at >= args.time_limit:
             return None, stats
     except ValueError:
-        stats = SearchStats(started_at=time.time())
+        stats = SearchStats(started_at=time.time(), strategy="hybrid")
 
     labels, stats = solve_graceful_branch_differences(
         adj,
@@ -989,6 +1385,21 @@ def label_string(labels: list[int] | None) -> str:
     return "" if labels is None else " ".join(map(str, labels))
 
 
+def load_solved_cases(paths: str | list[str]) -> set[str]:
+    if isinstance(paths, str):
+        paths = [paths]
+    solved: set[str] = set()
+    for path in paths:
+        with open(path, "r", encoding="utf-8", newline="") as f:
+            for row in csv.DictReader(f):
+                case_name = row.get("case", "")
+                if not case_name or "\x00" in case_name:
+                    continue
+                if row.get("solved") == "1":
+                    solved.add(case_name)
+    return solved
+
+
 def run_cases(
     cases: Iterable[tuple[str, int, list[Edge], int | None]],
     args: argparse.Namespace,
@@ -1006,10 +1417,14 @@ def run_cases(
     skipped = 0
     checked = 0
     started = time.time()
+    skip_solved = load_solved_cases(args.skip_solved_from) if args.skip_solved_from else set()
     fieldnames = [
         "case",
         "vertices",
         "seed",
+        "strategy",
+        "reduction_base",
+        "extended_edges",
         "status",
         "solved",
         "nodes",
@@ -1023,6 +1438,9 @@ def run_cases(
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for case_name, n, edges, case_seed in cases:
+            if case_name in skip_solved:
+                skipped += 1
+                continue
             if args.total_time_limit is not None and time.time() - started >= args.total_time_limit:
                 print(f"stopping: total time limit reached after {checked} cases")
                 break
@@ -1033,6 +1451,9 @@ def run_cases(
                         "case": case_name,
                         "vertices": n,
                         "seed": "" if case_seed is None else case_seed,
+                        "strategy": "skipped",
+                        "reduction_base": "",
+                        "extended_edges": 0,
                         "status": "skipped_too_large",
                         "solved": 0,
                         "nodes": 0,
@@ -1068,6 +1489,9 @@ def run_cases(
                     "case": case_name,
                     "vertices": n,
                     "seed": "" if case_seed is None else case_seed,
+                    "strategy": stats.strategy,
+                    "reduction_base": stats.reduction_base,
+                    "extended_edges": stats.extended_edges,
                     "status": status,
                     "solved": int(ok),
                     "nodes": stats.nodes,
@@ -1084,6 +1508,8 @@ def run_cases(
                     f"case {checked}: solved={solved}, timeouts={timeouts}, skipped={skipped}, "
                     f"hardest_nodes={best_nodes}, rate={rate:.2f}/s"
                 )
+
+    close_pendant_extension_cache()
 
     elapsed_total = time.time() - started
     print(
@@ -1171,6 +1597,9 @@ def run_five_leaf_nonspider_by_edges(args: argparse.Namespace) -> int:
     max_edges = args.five_leaf_nonspider_by_edges
     if max_edges < 6:
         raise ValueError("--five-leaf-nonspider-by-edges needs at least 6 edges")
+    min_edges = max(6, args.min_edges)
+    if min_edges > max_edges:
+        raise ValueError("--min-edges cannot exceed --five-leaf-nonspider-by-edges")
 
     def positive_tuples(parts: int, total: int) -> Iterable[tuple[int, ...]]:
         if parts == 1:
@@ -1182,7 +1611,7 @@ def run_five_leaf_nonspider_by_edges(args: argparse.Namespace) -> int:
                 yield (first, *rest)
 
     def cases() -> Iterable[tuple[str, int, list[Edge], int | None]]:
-        for total_edges in range(6, max_edges + 1):
+        for total_edges in range(min_edges, max_edges + 1):
             for lengths in positive_tuples(6, total_edges):
                 bridge = lengths[0]
                 left = tuple(sorted(lengths[1:3]))
@@ -1223,6 +1652,66 @@ def run_five_leaf_nonspider_by_edges(args: argparse.Namespace) -> int:
     )
 
 
+def unordered_pair_partition_count(total: int) -> int:
+    """Positive partitions of total into two unordered parts."""
+    return total // 2 if total >= 2 else 0
+
+
+def unordered_triple_partition_count(total: int) -> int:
+    """Positive partitions of total into three unordered parts."""
+    return (total * total + 3) // 12 if total >= 3 else 0
+
+
+def count_five_leaf_two_branch_exact_edges(total_edges: int) -> int:
+    count = 0
+    for bridge in range(1, total_edges - 4):
+        remaining = total_edges - bridge
+        for left_sum in range(2, remaining - 2):
+            right_sum = remaining - left_sum
+            count += unordered_pair_partition_count(left_sum) * unordered_triple_partition_count(right_sum)
+    return count
+
+
+def count_five_leaf_three_branch_exact_edges(total_edges: int) -> int:
+    # A side consists of the branch-to-parent path plus two unordered leaf paths.
+    side_counts = [0] * (total_edges + 1)
+    for side_edges in range(3, total_edges + 1):
+        side_counts[side_edges] = sum(
+            unordered_pair_partition_count(pair_sum)
+            for pair_sum in range(2, side_edges)
+        )
+
+    count = 0
+    for middle_leaf in range(1, total_edges - 5):
+        side_sum = total_edges - middle_leaf
+        for left_edges in range(3, side_sum // 2 + 1):
+            right_edges = side_sum - left_edges
+            if right_edges < 3:
+                continue
+            if left_edges < right_edges:
+                count += side_counts[left_edges] * side_counts[right_edges]
+            else:
+                count += side_counts[left_edges] * (side_counts[left_edges] + 1) // 2
+    return count
+
+
+def run_count_five_leaf_nonspider_by_edges(args: argparse.Namespace) -> int:
+    max_edges = args.count_five_leaf_nonspider_by_edges
+    min_edges = max(6, args.min_edges)
+    if min_edges > max_edges:
+        raise ValueError("--min-edges cannot exceed --count-five-leaf-nonspider-by-edges")
+
+    cumulative = 0
+    print("edges,two_branch,three_branch,total,cumulative")
+    for total_edges in range(min_edges, max_edges + 1):
+        two = count_five_leaf_two_branch_exact_edges(total_edges)
+        three = count_five_leaf_three_branch_exact_edges(total_edges)
+        total = two + three
+        cumulative += total
+        print(f"{total_edges},{two},{three},{total},{cumulative}")
+    return 0
+
+
 def run_lobster_batch(args: argparse.Namespace) -> int:
     rng = random.Random(args.seed)
     def cases() -> Iterable[tuple[str, int, list[Edge], int | None]]:
@@ -1253,6 +1742,9 @@ def run_replay_unsolved(args: argparse.Namespace) -> int:
         "vertices",
         "seed",
         "previous_nodes",
+        "strategy",
+        "reduction_base",
+        "extended_edges",
         "status",
         "solved",
         "nodes",
@@ -1291,6 +1783,9 @@ def run_replay_unsolved(args: argparse.Namespace) -> int:
                         "vertices": n,
                         "seed": row.get("seed", ""),
                         "previous_nodes": row.get("nodes", ""),
+                        "strategy": "skipped",
+                        "reduction_base": "",
+                        "extended_edges": 0,
                         "status": "skipped_too_large",
                         "solved": 0,
                         "nodes": 0,
@@ -1318,6 +1813,9 @@ def run_replay_unsolved(args: argparse.Namespace) -> int:
                     "vertices": n,
                     "seed": row.get("seed", ""),
                     "previous_nodes": row.get("nodes", ""),
+                    "strategy": stats.strategy,
+                    "reduction_base": stats.reduction_base,
+                    "extended_edges": stats.extended_edges,
                     "status": status,
                     "solved": int(ok),
                     "nodes": stats.nodes,
@@ -1406,29 +1904,67 @@ def run_analyze_log(args: argparse.Namespace) -> int:
 
 def run_summarize_log(args: argparse.Namespace) -> int:
     path = args.summarize_log
+    row_count = 0
+    solved_count = 0
+    unsolved_count = 0
+    malformed_count = 0
+    strategies: Counter[str] = Counter()
+    reduction_bases: set[str] = set()
+    hardest: list[tuple[int, int, dict[str, str]]] = []
+    unsolved: list[dict[str, str]] = []
     with open(path, "r", encoding="utf-8", newline="") as f:
-        rows = list(csv.DictReader(f))
-    solved = [r for r in rows if r.get("solved") == "1"]
-    unsolved = [r for r in rows if r.get("solved") != "1"]
+        for row_index, row in enumerate(csv.DictReader(f)):
+            case_name = row.get("case", "")
+            if not case_name or "\x00" in case_name:
+                malformed_count += 1
+                continue
+            row_count += 1
+            is_solved = row.get("solved") == "1"
+            solved_count += int(is_solved)
+            unsolved_count += int(not is_solved)
+            strategies[row.get("strategy") or "legacy-search"] += 1
+            if row.get("reduction_base"):
+                reduction_bases.add(row["reduction_base"])
+            if not is_solved and len(unsolved) < 50:
+                unsolved.append(row)
+            try:
+                nodes = int(row.get("nodes") or 0)
+            except ValueError:
+                nodes = 0
+            item = (nodes, row_index, row)
+            if len(hardest) < 10:
+                heapq.heappush(hardest, item)
+            elif item[:2] > hardest[0][:2]:
+                heapq.heapreplace(hardest, item)
     print(f"log: {path}")
-    print(f"rows={len(rows)}, solved={len(solved)}, unsolved={len(unsolved)}")
-    if rows:
-        hardest = sorted(rows, key=lambda r: int(r.get("nodes") or 0), reverse=True)[:10]
+    print(
+        f"rows={row_count}, solved={solved_count}, unsolved={unsolved_count}, "
+        f"malformed={malformed_count}"
+    )
+    if strategies:
+        print("strategies:")
+        for strategy, count in strategies.most_common():
+            print(f"  {strategy}: {count}")
+    if reduction_bases:
+        print(f"unique reduction bases: {len(reduction_bases)}")
+    if hardest:
         print("top hardest:")
-        for row in hardest:
+        for _nodes, _row_index, row in sorted(hardest, reverse=True):
             print(
                 f"  {row.get('case', '')}: solved={row.get('solved', '')}, "
                 f"vertices={row.get('vertices', '')}, nodes={row.get('nodes', '')}, "
-                f"elapsed={row.get('elapsed_seconds', '')}"
+                f"elapsed={row.get('elapsed_seconds', '')}, strategy={row.get('strategy', '')}"
             )
-    if unsolved:
+    if unsolved_count:
         print("unsolved cases:")
         for row in unsolved:
             print(
                 f"  {row.get('case', '')}: vertices={row.get('vertices', '')}, "
                 f"nodes={row.get('nodes', '')}, elapsed={row.get('elapsed_seconds', '')}"
             )
-    return 0 if not unsolved else 2
+        if unsolved_count > len(unsolved):
+            print(f"  ... {unsolved_count - len(unsolved)} more unsolved rows")
+    return 0 if unsolved_count == 0 else 2
 
 
 def main(argv: list[str]) -> int:
@@ -1451,10 +1987,22 @@ def main(argv: list[str]) -> int:
         metavar="MAX_EDGES",
         help="check all non-spider 5-leaf trees with at most MAX_EDGES edges",
     )
+    source.add_argument(
+        "--count-five-leaf-nonspider-by-edges",
+        type=int,
+        metavar="MAX_EDGES",
+        help="count non-spider 5-leaf trees by exact edge count without running search",
+    )
     source.add_argument("--lobster-batch", type=int, metavar="TRIALS", help="run many random lobster-tree trials")
     source.add_argument("--replay-unsolved", help="CSV log to replay rows with solved=0")
     source.add_argument("--analyze-log", help="CSV log to analyze tree structure features")
     source.add_argument("--summarize-log", help="CSV log to summarize solved/timeouts and hardest cases")
+    source.add_argument(
+        "--import-extension-cache",
+        nargs="+",
+        metavar="CSV",
+        help="import recoverable pendant-extension certificates from CSV logs",
+    )
     parser.add_argument("--vertices", type=int, help="vertices per tree in --batch mode")
     parser.add_argument("--spider-legs", type=int, help="number of legs for --spider-sweep")
     parser.add_argument("--spider-sweep-from", type=int, help="only include spider-sweep cases whose maximum leg is at least this value")
@@ -1466,15 +2014,29 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--direct-base-leaves", type=int, default=1, help="max direct leaves attached to each lobster base vertex")
     parser.add_argument("--seed", type=int, help="random seed")
     parser.add_argument("--time-limit", type=float, default=None, help="seconds before giving up")
-    parser.add_argument("--method", choices=["exact", "spider", "branch", "diff", "heuristic", "hybrid"], default="exact", help="search method")
+    parser.add_argument("--method", choices=["exact", "spider", "branch", "compressed", "diff", "heuristic", "hybrid"], default="exact", help="search method")
+    parser.add_argument("--no-constructive-fastpath", action="store_true", help="disable direct caterpillar labeling before search")
+    parser.add_argument("--extension-fastpath-nodes", type=int, default=2_000, help="node budget for the pendant-extension base search")
+    parser.add_argument("--extension-cache-size", type=int, default=100_000, help="maximum rooted base certificates kept in memory")
+    parser.add_argument(
+        "--extension-cache-db",
+        default="results/pendant_extension_cache.sqlite3",
+        help="SQLite database for persistent rooted base certificates (use empty string to disable)",
+    )
     parser.add_argument("--diff-candidates", type=int, help="limit candidate placements per edge difference")
     parser.add_argument("--heuristic-steps", type=int, default=1_000_000, help="swap attempts per heuristic restart")
     parser.add_argument("--heuristic-restarts", type=int, default=50, help="heuristic random restarts")
     parser.add_argument("--total-time-limit", type=float, default=None, help="total seconds for --batch mode")
     parser.add_argument("--max-vertices", type=int, help="skip generated batch cases above this many vertices")
+    parser.add_argument("--min-edges", type=int, default=6, help="first edge count for --five-leaf-nonspider-by-edges")
     parser.add_argument("--log", help="CSV path for --batch results")
     parser.add_argument("--save-hardest", help="edge-list path for the hardest tree seen in --batch")
     parser.add_argument("--save-failed", help="edge-list path for the latest failed/timeout tree")
+    parser.add_argument(
+        "--skip-solved-from",
+        action="append",
+        help="CSV log whose solved case names should be skipped; may be repeated",
+    )
     parser.add_argument("--replay-log", help="CSV path for --replay-unsolved results")
     parser.add_argument("--analysis-log", help="CSV path for --analyze-log results")
     parser.add_argument("--start-case", type=int, default=1, help="first CSV data row to consider in --replay-unsolved")
@@ -1496,6 +2058,8 @@ def main(argv: list[str]) -> int:
             return run_five_leaf_nonspider_sweep(args)
         if args.five_leaf_nonspider_by_edges is not None:
             return run_five_leaf_nonspider_by_edges(args)
+        if args.count_five_leaf_nonspider_by_edges is not None:
+            return run_count_five_leaf_nonspider_by_edges(args)
         if args.lobster_batch is not None:
             return run_lobster_batch(args)
         if args.replay_unsolved is not None:
@@ -1504,6 +2068,10 @@ def main(argv: list[str]) -> int:
             return run_analyze_log(args)
         if args.summarize_log is not None:
             return run_summarize_log(args)
+        if args.import_extension_cache is not None:
+            if not args.extension_cache_db:
+                raise ValueError("--import-extension-cache requires --extension-cache-db")
+            return import_pendant_extension_cache_logs(args.import_extension_cache, args.extension_cache_db)
 
         original: list[int] | None = None
         if args.edges:
@@ -1533,6 +2101,7 @@ def main(argv: list[str]) -> int:
             print("internal error: produced labeling failed verification", file=sys.stderr)
             return 3
         print_solution(edges, labels, original)
+        print(f"strategy: {stats.strategy}")
         print(f"searched {stats.nodes} nodes, {stats.backtracks} backtracks, {elapsed:.3f}s")
         return 0
     except Exception as exc:

@@ -61,11 +61,19 @@ The graceful solver uses several modes:
 - edge-difference backtracking,
 - spider-specific frontier search,
 - branch-oriented difference search,
+- constructive compression by caterpillar alpha-labeling and extremal
+  pendant-path extension,
 - hybrid fallbacks.
 
 For non-spider five-leaf trees, the branch-oriented method fixes a branch
 vertex at label 0 and assigns large edge differences while expanding through
 already labeled branch structure.
+
+The compressed method uses a proved rooted reduction: a graceful base whose
+selected leaf is extremal generates every longer version of that pendant
+segment. Rooted base certificates are canonicalized and reused across
+isomorphic cases. A complete run through 20 edges reduced search nodes from
+3,822,923 to 435,073 while independently verifying all 20,119 certificates.
 
 ## 5. Antimagic Search
 
@@ -105,7 +113,16 @@ Current graceful non-spider five-leaf verification:
 edges <= 30: 399052 / 399052 solved
 edges <= 35: 1225773 / 1225773 solved
 edges <= 40: 3224679 / 3224679 solved
+edges <= 45: 7543822 / 7543822 solved
+edges = 46: 1293708 / 1293708 solved
+edges = 47: 1479480 / 1479482 solved
+edges = 48-50: 5780094 / 5780094 solved
 ```
+
+The compressed 48-50 run enumerated 5,780,094 trees but produced only
+2,166,443 distinct rooted reduction bases. The run completed without a
+timeout in approximately 4 hours 56 minutes. This version reports the
+operational reduction and speedup; detailed proof notes are deferred.
 
 Current antimagic non-spider five-leaf verification:
 
@@ -113,6 +130,7 @@ Current antimagic non-spider five-leaf verification:
 edges <= 35: 1225773 / 1225773 solved
 edges <= 40: 3224679 / 3224679 solved
 edges <= 45: 7543822 / 7543822 solved
+edges <= 50: 16097106 / 16097106 solved
 ```
 
 Ongoing runs should be added only after certificate verification.

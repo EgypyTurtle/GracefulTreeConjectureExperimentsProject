@@ -12,3 +12,6 @@ outputs/
 *.csv
 !examples/*.csv
 
+# Generated hardest/failed edge lists kept outside the source tree.
+/failed_five_leaf_nonspider_by_edges.txt
+/hardest_five_leaf_nonspider_by_edges.txt
