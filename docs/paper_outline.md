@@ -115,7 +115,7 @@ edges <= 35: 1225773 / 1225773 solved
 edges <= 40: 3224679 / 3224679 solved
 edges <= 45: 7543822 / 7543822 solved
 edges = 46: 1293708 / 1293708 solved
-edges = 47: 1479480 / 1479482 solved
+edges = 47: 1479482 / 1479482 solved
 edges = 48-50: 5780094 / 5780094 solved
 ```
 

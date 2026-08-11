@@ -386,20 +386,23 @@ The subsequent compressed runs extended the graceful computation:
 
 ```text
 exact edge 46: 1,293,708 / 1,293,708 solved
-exact edge 47: 1,479,480 / 1,479,482 solved
+exact edge 47: 1,479,482 / 1,479,482 solved
 exact edges 48-50: 5,780,094 / 5,780,094 solved
 ```
+
+The two initial 47-edge timeout cases were replayed with the compressed
+method and both were solved. No unresolved graceful cases remain through 50
+edges.
 
 The 48-50 run used the persistent rooted-certificate database. The raw
 5,780,094 cases produced 2,166,443 distinct rooted reduction bases, a 62.5%
 reduction in distinct base instances. The strategy counts were:
 
 ```text
-pendant-extension-disk-cache       4,625,696
-pendant-extension-cache              200,000
-caterpillar                           24,289
-pendant-extension                    765,534
-pendant-extension+branch             164,575
+previous certified reductions reused       4,825,696
+direct constructive cases                      24,289
+new reduced-instance searches                 765,534
+full-search fallback cases                    164,575
 ```
 
 The run took approximately 4 hours 56 minutes of wall time and had no final

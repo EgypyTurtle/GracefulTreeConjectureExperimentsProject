@@ -50,7 +50,7 @@ Non-spider 5-leaf trees:
   edges <= 40: 3224679 / 3224679 solved
   edges <= 45: 7543822 / 7543822 solved
   edges = 46: 1293708 / 1293708 solved
-  edges = 47: 1479480 / 1479482 solved (2 unresolved)
+  edges = 47: 1479482 / 1479482 solved
   edges = 48-50: 5780094 / 5780094 solved
 
 Antimagic non-spider 5-leaf trees:
@@ -257,21 +257,18 @@ Detailed constructive proof notes are being kept for a later revision.
 
 ## Data Policy
 
-Full CSV logs can become large. This repository keeps a small example CSV under
-`examples/`. For larger runs, generate logs locally using the commands above or
-publish compressed result archives separately.
+The GitHub version contains source code, reproducible commands, tests, and
+compact result summaries. Generated search data is kept locally:
 
-The current antimagic workflow uses a deterministic search followed by a
-randomized fallback only for timeout cases. On the `edges <= 40` hard cases,
-this resolved all five initial timeouts and reduced the observed search from
-millions of deterministic nodes to a few hundred randomized nodes in the
-successful trials.
+- Full CSV logs under `results/` are ignored because they can reach multiple
+  gigabytes.
+- The persistent certificate database under `results/` is a local accelerator
+  and is not part of the source distribution.
+- Temporary hardest/failed edge lists are also excluded.
+- Small hand-picked examples may be placed under `examples/`.
 
-The same workflow has now solved all `7,543,822` non-spider five-leaf trees
-with at most 45 edges. The run used randomized fallback on 552 cases and had
-no final timeouts.
-
-The antimagic `edges <= 50` run was resumed from its solved-row checkpoint and
-contains `16,097,106` valid solved rows. The separate graceful 48-50
-compressed run contains `5,780,094` solved rows and is summarized in
-`docs/current_results.md`.
+The current graceful computation through 50 edges contains
+`16,097,106 / 16,097,106` solved cases. The separate antimagic computation
+through 50 edges also contains `16,097,106` valid solved rows. The numerical
+summaries in `docs/current_results.md` are the public record for the larger
+local runs.

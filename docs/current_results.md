@@ -27,7 +27,7 @@ The current exact-edge results are:
 range       cases       solved       unresolved
 <=45        7,543,822   7,543,822    0
 46          1,293,708   1,293,708    0
-47          1,479,482   1,479,480    2
+47          1,479,482   1,479,482    0
 48-50       5,780,094   5,780,094    0
 ```
 
@@ -35,46 +35,39 @@ Thus the current combined status through 50 edges is:
 
 ```text
 16,097,106 cases enumerated
-16,097,104 solved
-2 unresolved
+16,097,106 solved
+0 unresolved
 ```
 
-The two unresolved 47-edge cases are retained as explicit hard cases rather
-than being silently omitted.
+The two initial 47-edge timeout cases were replayed separately and both
+solved. They are included in the final solved total rather than being silently
+omitted.
 
 ## Reduction and Reuse
 
-The `compressed` method applies the structural reductions operationally:
-
-```text
-caterpillar construction
-  -> pendant-path reduction
-  -> rooted certificate lookup
-  -> extremal pendant-path extension
-  -> reduced-base search only on cache misses
-  -> branch fallback for the remaining hard cases
-```
+The computation used previously certified structural cases to reduce later
+trees before searching them. The reduction is certificate-producing: every
+case still receives a complete labeling when it is solved, but many cases no
+longer require an independent full-size search.
 
 For the 48-50 run, the raw family contained 5,780,094 trees but only
-2,166,443 distinct rooted reduction bases were recorded. This is a reduction
-of 3,613,651 equivalent base problems, or approximately 62.5% fewer distinct
-rooted instances.
+2,166,443 distinct reduced rooted instances were recorded. This removes
+3,613,651 repeated instances, or approximately 62.5% of the original
+independent problems.
 
-The strategy distribution was:
+The work distribution was:
 
 ```text
-pendant-extension-disk-cache       4,625,696   80.03%
-pendant-extension-cache              200,000    3.46%
-caterpillar                           24,289    0.42%
-pendant-extension                    765,534   13.24%
-pendant-extension+branch             164,575    2.85%
-total                               5,780,094  100.00%
+previous certified reductions reused       4,825,696   83.49%
+direct constructive cases                      24,289    0.42%
+new reduced-instance searches                 765,534   13.24%
+full-search fallback cases                    164,575    2.85%
+total                                       5,780,094  100.00%
 ```
 
-The disk-cache and memory-cache rows were solved by reusing rooted
-certificates and extending them. The `pendant-extension` rows searched a
-smaller rooted base. Only the final `pendant-extension+branch` category used
-the full branch-oriented fallback.
+The table is intentionally stated at the level of computational work rather
+than implementation details. It shows how the structural reduction changes
+the effective search workload while preserving a certificate for every case.
 
 ## Runtime Comparison
 
