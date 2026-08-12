@@ -1,6 +1,6 @@
 # Graceful Tree Computation Technical Report
 
-Date: 2026-08-04
+Date: 2026-08-12
 
 ## 0. Algorithmic Verification Protocol
 
@@ -408,6 +408,40 @@ full-search fallback cases                    164,575
 The run took approximately 4 hours 56 minutes of wall time and had no final
 timeouts. These figures measure the search framework and its certificate
 reuse; they do not constitute a proof of the Graceful Tree Conjecture.
+
+The next compressed interval extended the initial pass through 55 edges:
+
+```text
+edges 51-55: 15,800,487 cases
+initial solved: 15,800,467
+initial timeouts: 20
+adaptive replay solved: 20
+final unresolved after replay: 0
+```
+
+The replay used an opt-in adaptive rooted-base budget of 100,000 nodes for a
+recurring five-leaf hard signature. The 20 replay certificates passed the
+independent verifier. The search time recorded inside the 20 replay cases was
+approximately 576 seconds; the larger wall-clock interval also included
+scanning the multi-gigabyte initial CSV to select the timeout rows.
+
+The associated controlled hard-pattern study tested 4,327 two-branch trees
+from 47 through 65 edges. Ordinary branch search solved 4,115 cases, while
+20,000-node pendant reduction solved 4,321. The six remaining rooted-base
+boundary cases were all solved with a 100,000-node budget. All-paths search
+did not improve over the longest pendant path. The ordinary branch solver's
+success rates were 1337/1338, 1391/1392, and 1387/1597 for edge counts
+congruent to 0, 1, and 2 modulo 3, respectively; after reduction, the average
+runtime was approximately 0.02 seconds in each residue class. This supports
+the interpretation that the mod-3 effect is a search artifact in this family,
+not evidence of a graceful-labeling obstruction.
+
+The main solver now exposes `--extension-adaptive-budget`, disabled by
+default. When enabled, the detector raises the rooted-base budget for trees
+with five leaves, two or three branch vertices, at least two terminal paths of
+length at most 3, and three remaining terminal paths of length at least 9.
+This is an algorithmic rule motivated by the replay data, not a mathematical
+theorem.
 
 ## 7. Second Case Study: Antimagic Labeling
 

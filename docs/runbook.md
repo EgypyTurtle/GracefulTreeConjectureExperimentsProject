@@ -86,6 +86,121 @@ certificates, and falls back to `branch` when no reduction certificate is found:
   --progress 20000
 ```
 
+## Generic Pendant-Path Reduction
+
+The same reduction can be used on generic generated trees. This is useful for
+lobsters, random trees, and other families whose members often contain long
+terminal paths. The extra flag tests all eligible terminal paths instead of
+only the historical longest-path candidate; the node and time budgets are
+shared across those attempts:
+
+```powershell
+& $PY ".\src\graceful_tree.py" `
+  --lobster-batch 10000 `
+  --base-vertices 12 `
+  --method compressed `
+  --extension-try-all-paths `
+  --extension-fastpath-nodes 2000 `
+  --extension-cache-size 100000 `
+  --extension-cache-db ".\results\pendant_extension_cache.sqlite3" `
+  --time-limit 30 `
+  --total-time-limit 604800 `
+  --log ".\results\lobster_compressed.csv" `
+  --save-hardest ".\results\hardest_lobster_compressed.txt" `
+  --save-failed ".\results\failed_lobster_compressed.txt" `
+  --progress 100
+```
+
+The option is also available with `--random`, `--batch`, `--edges`, and
+`--spider-sweep`. It is an opt-in generalization of the existing compressed
+solver, not an exhaustive enumerator for every tree family. Successful
+reductions are recorded in the usual `strategy`, `reduction_base`, and
+`extended_edges` columns.
+
+For a structural coverage report, use the streaming summary command. It
+reports candidate trees with eligible pendant paths separately from trees
+whose logs contain verified extension certificates:
+
+```powershell
+& $PY ".\src\graceful_tree.py" `
+  --summarize-reduction `
+  ".\results\five_leaf_nonspider_edges48_50_compressed.csv" `
+  --reduction-summary-output ".\results\reduction_48_50.csv"
+```
+
+Multiple disjoint logs can be listed. The summary does not rerun search, and
+overlapping logs should not be supplied because rows are counted as given.
+
+## Hard-Pattern Budget Comparison
+
+To test the suspected residue-class effect, run the fixed family with bridge 2,
+short paths `(1,1)`, and sorted long paths `(a,b,c)` over 47--65 edges:
+
+```powershell
+& $PY ".\src\hard_pattern_experiment.py" `
+  --min-edges 47 `
+  --max-edges 65 `
+  --time-limit 10 `
+  --total-time-limit 604800 `
+  --log ".\results\hard_pattern_47_65_comparison.csv" `
+  --progress 50
+```
+
+There are 4,327 cases in this interval. Each row compares ordinary `branch`
+search with reduction fast paths limited to 2,000 and 20,000 rooted-base
+nodes. The experiment intentionally disables the persistent certificate cache
+so that the two fast-path budgets are comparable. If interrupted, rerun the
+same command with `--resume`; completed case names are skipped. To summarize
+an existing log without searching again:
+
+```powershell
+& $PY ".\src\hard_pattern_experiment.py" `
+  --summary-only `
+  --log ".\results\hard_pattern_47_65_comparison.csv"
+```
+
+The six boundary cases left by the 20,000-node comparison can be tested
+without rerunning the full 4,327-case family:
+
+```powershell
+& $PY ".\src\hard_boundary_experiment.py" `
+  --time-limit 60 `
+  --total-time-limit 604800 `
+  --low-nodes 20000 `
+  --high-nodes 100000 `
+  --log ".\results\hard_boundary_61_65.csv" `
+  --progress 1
+```
+
+This compares ordinary branch search, one-path reduction at 20,000 and
+100,000 nodes, and all-path reduction at 100,000 nodes. If interrupted, add
+`--resume` to the same command. To summarize an existing targeted log without
+searching again:
+
+```powershell
+& $PY ".\src\hard_boundary_experiment.py" `
+  --summary-only `
+  --log ".\results\hard_boundary_61_65.csv"
+```
+
+For the main solver, enable the adaptive budget during replay with:
+
+```powershell
+& $PY ".\src\graceful_tree.py" `
+  --replay-unsolved ".\results\five_leaf_nonspider_edges51_55_compressed.csv" `
+  --method compressed `
+  --extension-adaptive-budget `
+  --extension-adaptive-nodes 100000 `
+  --extension-cache-db= `
+  --time-limit 600 `
+  --replay-log ".\results\five_leaf_nonspider_edges51_55_replay_adaptive100k.csv" `
+  --progress 1
+```
+
+Rows solved by the larger budget are recorded with strategy
+`pendant-extension-adaptive`; cases outside the structural signature retain
+the historical budget and strategy.
+
 The persistent cache is the SQLite file
 `.\results\pendant_extension_cache.sqlite3`. It stores every successful
 rooted base certificate found by `compressed`; `--extension-cache-size` only
@@ -242,3 +357,28 @@ an earlier log and writing the remaining cases to a new continuation log:
 
 The continuation command should report a nonzero `skipped=...` count after the
 first progress update.
+
+## Next Graceful Interval: 56--57
+
+The next incremental run contains 9,302,112 cases:
+
+```powershell
+& $PY ".\src\graceful_tree.py" `
+  --five-leaf-nonspider-by-edges 57 `
+  --min-edges 56 `
+  --method compressed `
+  --extension-adaptive-budget `
+  --extension-adaptive-nodes 100000 `
+  --extension-fastpath-nodes 2000 `
+  --extension-cache-db ".\results\pendant_extension_cache.sqlite3" `
+  --time-limit 300 `
+  --total-time-limit 604800 `
+  --log ".\results\five_leaf_nonspider_edges56_57_adaptive.csv" `
+  --save-hardest ".\results\hardest_edges56_57_adaptive.txt" `
+  --save-failed ".\results\failed_edges56_57_adaptive.txt" `
+  --progress 20000
+```
+
+If the run is interrupted, retain the SQLite cache and use a continuation log
+with `--skip-solved-from` rather than discarding the completed rows. Timeout
+rows can then be replayed with the same adaptive options.

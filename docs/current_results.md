@@ -1,6 +1,6 @@
 # Current Computational Results
 
-Date: 2026-08-11
+Date: 2026-08-12
 
 This page records the current public status of the graceful-labeling
 experiments. It focuses on the computational reduction and acceleration
@@ -29,6 +29,7 @@ range       cases       solved       unresolved
 46          1,293,708   1,293,708    0
 47          1,479,482   1,479,482    0
 48-50       5,780,094   5,780,094    0
+51-55      15,800,487  15,800,467   20 initial timeouts
 ```
 
 Thus the current combined status through 50 edges is:
@@ -42,6 +43,20 @@ Thus the current combined status through 50 edges is:
 The two initial 47-edge timeout cases were replayed separately and both
 solved. They are included in the final solved total rather than being silently
 omitted.
+
+The 51-55 bulk pass produced 20 timeout rows. The replay log
+`five_leaf_nonspider_edges51_55_replay_adaptive100k.csv` solved all 20, and an
+independent verifier reported `checked_solved=20, bad=0`. Thus the combined
+covered result through 55 edges is:
+
+```text
+cases covered after replay: 31,897,593
+solved certificates:        31,897,593
+unresolved after replay:              0
+```
+
+The initial bulk log and the timeout replay are kept as separate artifacts so
+that the first-pass timeout count remains auditable.
 
 ## Reduction and Reuse
 
@@ -68,6 +83,34 @@ total                                       5,780,094  100.00%
 The table is intentionally stated at the level of computational work rather
 than implementation details. It shows how the structural reduction changes
 the effective search workload while preserving a certificate for every case.
+
+## Hard-Pattern Findings
+
+A controlled family of 4,327 two-branch five-leaf trees was tested over 47--65
+edges with bridge length 2, two unit pendant paths, and three variable long
+paths. Ordinary branch search solved 4,115 cases, while 20,000-node pendant
+reduction solved 4,321. The six remaining cases were solved by a targeted
+100,000-node rooted-base replay. All-paths reduction gave no improvement over
+the longest-path choice on those six cases.
+
+The ordinary branch solver showed a strong residue-class effect:
+
+```text
+edge mod 3 = 0: 1337 / 1338 solved
+edge mod 3 = 1: 1391 / 1392 solved
+edge mod 3 = 2: 1387 / 1597 solved
+```
+
+After pendant reduction, the average time was approximately 0.02 seconds per
+case in all three residue classes. This supports the interpretation that the
+observed mod-3 effect is a search-order/state-space artifact, not evidence of
+a graceful-labeling obstruction.
+
+The six boundary cases required 24,002 or 25,435 rooted-base nodes. The main
+solver now supports the opt-in `--extension-adaptive-budget` rule, which raises
+the budget to 100,000 for the observed five-leaf signature. This is an
+algorithmic heuristic backed by the experiments, not a new mathematical
+theorem.
 
 ## Runtime Comparison
 

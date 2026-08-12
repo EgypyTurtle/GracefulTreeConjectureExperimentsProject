@@ -917,6 +917,20 @@ def pendant_paths(adj: list[list[int]]) -> list[list[int]]:
     return paths
 
 
+def is_hard_pendant_extension_pattern(adj: list[list[int]]) -> bool:
+    """Detect the observed five-leaf pattern that needs a larger base budget."""
+    leaves = sum(len(neighbors) == 1 for neighbors in adj)
+    branch_vertices = [u for u, neighbors in enumerate(adj) if len(neighbors) >= 3]
+    if leaves != 5 or len(branch_vertices) not in {2, 3}:
+        return False
+    terminal_lengths = [len(path) - 1 for path in pendant_paths(adj)]
+    if len(terminal_lengths) != 5:
+        return False
+    short_paths = [length for length in terminal_lengths if length <= 3]
+    long_paths = [length for length in terminal_lengths if length > 3]
+    return len(short_paths) >= 2 and len(long_paths) == 3 and min(long_paths) >= 9
+
+
 def rooted_canonical_order(adj: list[list[int]], root: int) -> tuple[str, list[int]]:
     """Return an AHU-style rooted-tree code and a compatible vertex order."""
     def visit(vertex: int, parent: int) -> tuple[str, list[int]]:
@@ -931,21 +945,10 @@ def rooted_canonical_order(adj: list[list[int]], root: int) -> tuple[str, list[i
     return visit(root, -1)
 
 
-def solve_graceful_pendant_extension(
-    adj: list[list[int]],
-    max_nodes: int = 2_000,
-    time_limit: float | None = None,
-    cache_size: int = 100_000,
-    cache_db: str | None = None,
-) -> tuple[list[int] | None, SearchStats]:
-    """Reduce one pendant path to one edge, then rebuild it by extremal extension."""
-    started_at = time.time()
-    if cache_db:
-        open_pendant_extension_cache(cache_db)
-    candidates = [path for path in pendant_paths(adj) if len(path) > 2]
-    if not candidates:
-        return None, SearchStats(started_at=started_at, strategy="pendant-extension")
-    path = max(candidates, key=lambda item: (len(item), -item[-1]))
+def pendant_reduction_data(
+    adj: list[list[int]], path: list[int]
+) -> tuple[list[int], list[list[int]], int, str, list[int]]:
+    """Build the rooted base obtained by shortening one pendant path."""
     removed = set(path[2:])
     kept = [u for u in range(len(adj)) if u not in removed]
     old_to_new = {old: new for new, old in enumerate(kept)}
@@ -958,40 +961,16 @@ def solve_graceful_pendant_extension(
     reduced_adj = build_adj(len(kept), reduced_edges)
     reduced_leaf = old_to_new[path[1]]
     cache_key, canonical_order = rooted_canonical_order(reduced_adj, reduced_leaf)
-    reduction_base = hashlib.sha256(cache_key.encode("ascii")).hexdigest()[:16]
-    cached_labels = _PENDANT_EXTENSION_CACHE.get(cache_key) if cache_size > 0 else None
-    cache_strategy = "pendant-extension-cache"
-    if cached_labels is None and cache_db:
-        cached_labels = persistent_cache_get(cache_key, cache_size)
-        if cached_labels is not None:
-            cache_strategy = "pendant-extension-disk-cache"
-    if cached_labels is not None:
-        labels = [-1] * len(kept)
-        for canonical_index, vertex in enumerate(canonical_order):
-            labels[vertex] = cached_labels[canonical_index]
-        stats = SearchStats(started_at=started_at, strategy=cache_strategy)
-    else:
-        labels, stats = solve_graceful_branch_differences(
-            reduced_adj,
-            time_limit=time_limit,
-            fixed_zero_vertex=reduced_leaf,
-            max_nodes=max_nodes,
-        )
-        stats.started_at = started_at
-        stats.strategy = "pendant-extension"
-        if labels is None:
-            stats.reduction_base = reduction_base
-            stats.extended_edges = len(path) - 2
-            return None, stats
-        if cache_size > 0 and len(_PENDANT_EXTENSION_CACHE) < cache_size:
-            _PENDANT_EXTENSION_CACHE[cache_key] = tuple(labels[vertex] for vertex in canonical_order)
-        persistent_cache_put(
-            cache_key,
-            tuple(labels[vertex] for vertex in canonical_order),
-        )
-    stats.reduction_base = reduction_base
-    stats.extended_edges = len(path) - 2
+    return kept, reduced_adj, reduced_leaf, cache_key, canonical_order
 
+
+def rebuild_pendant_extension(
+    adj: list[list[int]],
+    path: list[int],
+    kept: list[int],
+    labels: list[int],
+) -> list[int] | None:
+    """Rebuild the original tree from a rooted base labeling."""
     target_labels = [-1] * len(adj)
     assigned: list[int] = []
     for new_vertex, old_vertex in enumerate(kept):
@@ -1008,11 +987,102 @@ def solve_graceful_pendant_extension(
                 target_labels[vertex] += 1
             target_labels[new_vertex] = 0
         else:
-            return None, stats
+            return None
         assigned.append(new_vertex)
         endpoint = new_vertex
         current_edges += 1
-    return target_labels, stats
+    return target_labels
+
+
+def solve_graceful_pendant_extension(
+    adj: list[list[int]],
+    max_nodes: int = 2_000,
+    time_limit: float | None = None,
+    cache_size: int = 100_000,
+    cache_db: str | None = None,
+    try_all_paths: bool = False,
+) -> tuple[list[int] | None, SearchStats]:
+    """Reduce pendant paths to one edge, then rebuild by extremal extension."""
+    started_at = time.time()
+    if cache_db:
+        open_pendant_extension_cache(cache_db)
+    candidates = [path for path in pendant_paths(adj) if len(path) > 2]
+    if not candidates:
+        return None, SearchStats(started_at=started_at, strategy="pendant-extension")
+    candidates.sort(key=lambda item: (len(item), -item[-1]), reverse=True)
+    if not try_all_paths:
+        candidates = candidates[:1]
+
+    total_nodes = 0
+    total_backtracks = 0
+    last_base = ""
+    last_extended_edges = 0
+    for path_index, path in enumerate(candidates):
+        kept, reduced_adj, reduced_leaf, cache_key, canonical_order = pendant_reduction_data(adj, path)
+        reduction_base = hashlib.sha256(cache_key.encode("ascii")).hexdigest()[:16]
+        last_base = reduction_base
+        last_extended_edges = len(path) - 2
+        cached_labels = _PENDANT_EXTENSION_CACHE.get(cache_key) if cache_size > 0 else None
+        cache_strategy = "pendant-extension-cache"
+        if cached_labels is None and cache_db:
+            cached_labels = persistent_cache_get(cache_key, cache_size)
+            if cached_labels is not None:
+                cache_strategy = "pendant-extension-disk-cache"
+        if cached_labels is not None:
+            labels = [-1] * len(kept)
+            for canonical_index, vertex in enumerate(canonical_order):
+                labels[vertex] = cached_labels[canonical_index]
+            path_stats = SearchStats(started_at=started_at, strategy=cache_strategy)
+        else:
+            remaining_nodes = max(0, max_nodes - total_nodes)
+            if try_all_paths and remaining_nodes == 0:
+                continue
+            remaining_time = None
+            if time_limit is not None:
+                remaining_time = max(0.0, time_limit - (time.time() - started_at))
+                if try_all_paths and remaining_time <= 0:
+                    continue
+            labels, path_stats = solve_graceful_branch_differences(
+                reduced_adj,
+                time_limit=remaining_time,
+                fixed_zero_vertex=reduced_leaf,
+                max_nodes=remaining_nodes,
+            )
+            total_nodes += path_stats.nodes
+            total_backtracks += path_stats.backtracks
+            path_stats.started_at = started_at
+            path_stats.strategy = "pendant-extension"
+            if labels is None:
+                path_stats.reduction_base = reduction_base
+                path_stats.extended_edges = len(path) - 2
+                if not try_all_paths:
+                    return None, path_stats
+                continue
+            certificate = tuple(labels[vertex] for vertex in canonical_order)
+            if cache_size > 0 and len(_PENDANT_EXTENSION_CACHE) < cache_size:
+                _PENDANT_EXTENSION_CACHE[cache_key] = certificate
+            persistent_cache_put(cache_key, certificate)
+        target_labels = rebuild_pendant_extension(adj, path, kept, labels)
+        if target_labels is not None:
+            path_stats.nodes = total_nodes
+            path_stats.backtracks = total_backtracks
+            path_stats.started_at = started_at
+            path_stats.reduction_base = reduction_base
+            path_stats.extended_edges = len(path) - 2
+            if try_all_paths and path_index > 0:
+                path_stats.strategy = "pendant-extension-multi"
+            return target_labels, path_stats
+        if not try_all_paths:
+            path_stats.reduction_base = reduction_base
+            path_stats.extended_edges = len(path) - 2
+            return None, path_stats
+
+    stats = SearchStats(started_at=started_at, strategy="pendant-extension-multi" if try_all_paths else "pendant-extension")
+    stats.nodes = total_nodes
+    stats.backtracks = total_backtracks
+    stats.reduction_base = last_base
+    stats.extended_edges = last_extended_edges
+    return None, stats
 
 
 def solve_graceful_caterpillar(adj: list[list[int]]) -> tuple[list[int] | None, SearchStats]:
@@ -1199,13 +1269,24 @@ def solve_tree(adj: list[list[int]], args: argparse.Namespace, seed: int | None 
         if labels is not None:
             return labels, stats
     if args.method == "compressed":
+        adaptive_budget = bool(
+            getattr(args, "extension_adaptive_budget", False)
+            and is_hard_pendant_extension_pattern(adj)
+        )
+        extension_nodes = args.extension_fastpath_nodes
+        if adaptive_budget:
+            extension_nodes = max(extension_nodes, args.extension_adaptive_nodes)
         labels, prefix_stats = solve_graceful_pendant_extension(
             adj,
-            max_nodes=args.extension_fastpath_nodes,
+            max_nodes=extension_nodes,
+            time_limit=args.time_limit,
             cache_size=args.extension_cache_size,
             cache_db=args.extension_cache_db,
+            try_all_paths=args.extension_try_all_paths,
         )
         if labels is not None:
+            if adaptive_budget:
+                prefix_stats.strategy = "pendant-extension-adaptive"
             return labels, prefix_stats
         elapsed = time.time() - prefix_stats.started_at
         remaining = None if args.time_limit is None else max(0.0, args.time_limit - elapsed)
@@ -1218,7 +1299,7 @@ def solve_tree(adj: list[list[int]], args: argparse.Namespace, seed: int | None 
         stats.nodes += prefix_stats.nodes
         stats.backtracks += prefix_stats.backtracks
         stats.started_at = prefix_stats.started_at
-        stats.strategy = "pendant-extension+branch"
+        stats.strategy = "pendant-extension-adaptive+branch" if adaptive_budget else "pendant-extension+branch"
         stats.reduction_base = prefix_stats.reduction_base
         stats.extended_edges = prefix_stats.extended_edges
         return labels, stats
@@ -1379,6 +1460,53 @@ def tree_features(n: int, edges: list[Edge]) -> dict[str, int]:
         "max_degree": max(degrees) if degrees else 0,
         "diameter": diameter,
     }
+
+
+def is_caterpillar_structure(adj: list[list[int]]) -> bool:
+    """Return whether deleting all leaves leaves a path (or one vertex)."""
+    spine = [u for u, neighbors in enumerate(adj) if len(neighbors) > 1]
+    if len(spine) <= 1:
+        return True
+    spine_set = set(spine)
+    spine_degree = {
+        u: sum(v in spine_set for v in adj[u])
+        for u in spine
+    }
+    if any(degree > 2 for degree in spine_degree.values()):
+        return False
+    endpoints = [u for u in spine if spine_degree[u] == 1]
+    if len(endpoints) != 2:
+        return False
+    seen = {endpoints[0]}
+    queue: deque[int] = deque([endpoints[0]])
+    while queue:
+        u = queue.popleft()
+        for v in adj[u]:
+            if v in spine_set and v not in seen:
+                seen.add(v)
+                queue.append(v)
+    return len(seen) == len(spine)
+
+
+def reduction_family_name(case_name: str, adj: list[list[int]]) -> str:
+    """Give a stable structural category for reduction summary reports."""
+    if case_name.startswith("fiveleaf2"):
+        return "five-leaf non-spider / two-branch"
+    if case_name.startswith("fiveleaf3"):
+        return "five-leaf non-spider / three-branch"
+    if case_name.startswith("spider-"):
+        return "spider"
+    if case_name.startswith("lobster-"):
+        return "lobster"
+    leaves = sum(len(neighbors) == 1 for neighbors in adj)
+    branch_vertices = sum(len(neighbors) >= 3 for neighbors in adj)
+    if branch_vertices == 0:
+        return "path"
+    if branch_vertices == 1:
+        return "spider"
+    if is_caterpillar_structure(adj):
+        return "caterpillar"
+    return f"{leaves}-leaf / {branch_vertices}-branch"
 
 
 def label_string(labels: list[int] | None) -> str:
@@ -1967,6 +2095,116 @@ def run_summarize_log(args: argparse.Namespace) -> int:
     return 0 if unsolved_count == 0 else 2
 
 
+def run_summarize_reduction(args: argparse.Namespace) -> int:
+    """Aggregate structural and observed pendant-reduction coverage by family."""
+    extension_successes = {
+        "pendant-extension",
+        "pendant-extension-adaptive",
+        "pendant-extension-cache",
+        "pendant-extension-disk-cache",
+        "pendant-extension-multi",
+    }
+    cache_reuses = {
+        "pendant-extension-cache",
+        "pendant-extension-disk-cache",
+    }
+    aggregates: dict[str, Counter[str]] = {}
+    reduction_bases: dict[str, set[str]] = {}
+    total_rows = 0
+    malformed = 0
+
+    for path in args.summarize_reduction:
+        with open(path, "r", encoding="utf-8", newline="") as source:
+            for row in csv.DictReader(source):
+                case_name = row.get("case", "")
+                try:
+                    edges = parse_edge_string(row["edges"])
+                    n = int(row["vertices"]) if row.get("vertices") else 1 + max(max(u, v) for u, v in edges)
+                    adj = build_adj(n, edges)
+                    assert_tree(n, edges, adj)
+                except (KeyError, TypeError, ValueError, IndexError):
+                    malformed += 1
+                    continue
+
+                total_rows += 1
+                category = reduction_family_name(case_name, adj)
+                stats = aggregates.setdefault(category, Counter())
+                bases = reduction_bases.setdefault(category, set())
+                stats["cases"] += 1
+                solved = row.get("solved") == "1"
+                stats["solved"] += int(solved)
+                stats["unsolved"] += int(not solved)
+
+                candidates = [path for path in pendant_paths(adj) if len(path) > 2]
+                stats["eligible_paths"] += len(candidates)
+                stats["structurally_eligible"] += int(bool(candidates))
+
+                strategy = row.get("strategy") or "legacy-search"
+                extension_attempted = strategy.startswith("pendant-extension")
+                extension_success = strategy in extension_successes
+                stats["extension_attempted"] += int(extension_attempted)
+                stats["extension_success"] += int(extension_success)
+                stats["cache_reuse"] += int(strategy in cache_reuses)
+                stats["new_base_certificate"] += int(strategy == "pendant-extension")
+                stats["multi_path_success"] += int(strategy == "pendant-extension-multi")
+                stats["direct_constructive"] += int(strategy == "caterpillar")
+                stats["branch_fallback"] += int(strategy.endswith("+branch") or strategy == "branch")
+                if solved and not extension_success and strategy != "caterpillar":
+                    stats["other_solved_search"] += 1
+                if row.get("reduction_base"):
+                    bases.add(row["reduction_base"])
+
+    output = args.reduction_summary_output or "reduction_summary.csv"
+    fieldnames = [
+        "category",
+        "cases",
+        "solved",
+        "unsolved",
+        "structurally_eligible",
+        "eligible_paths",
+        "extension_attempted",
+        "extension_success",
+        "cache_reuse",
+        "new_base_certificate",
+        "multi_path_success",
+        "direct_constructive",
+        "branch_fallback",
+        "other_solved_search",
+        "unique_reduction_bases",
+        "eligible_rate",
+        "certified_reduction_rate",
+    ]
+    with open(output, "w", encoding="utf-8", newline="") as destination:
+        writer = csv.DictWriter(destination, fieldnames=fieldnames)
+        writer.writeheader()
+        for category in sorted(aggregates):
+            stats = aggregates[category]
+            cases = stats["cases"]
+            row = {field: stats[field] for field in fieldnames if field in stats}
+            row.update(
+                {
+                    "category": category,
+                    "unique_reduction_bases": len(reduction_bases[category]),
+                    "eligible_rate": f"{100 * stats['structurally_eligible'] / max(cases, 1):.3f}%",
+                    "certified_reduction_rate": f"{100 * stats['extension_success'] / max(cases, 1):.3f}%",
+                }
+            )
+            writer.writerow(row)
+
+    print(f"reduction summary: rows={total_rows}, malformed={malformed}")
+    print(f"summary CSV: {output}")
+    for category in sorted(aggregates):
+        stats = aggregates[category]
+        print(
+            f"  {category}: cases={stats['cases']}, solved={stats['solved']}, "
+            f"eligible={stats['structurally_eligible']}, "
+            f"extension_success={stats['extension_success']}, "
+            f"direct={stats['direct_constructive']}, "
+            f"fallback={stats['branch_fallback']}"
+        )
+    return 0
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Search for graceful labelings of trees.")
     source = parser.add_mutually_exclusive_group(required=True)
@@ -1998,6 +2236,12 @@ def main(argv: list[str]) -> int:
     source.add_argument("--analyze-log", help="CSV log to analyze tree structure features")
     source.add_argument("--summarize-log", help="CSV log to summarize solved/timeouts and hardest cases")
     source.add_argument(
+        "--summarize-reduction",
+        nargs="+",
+        metavar="CSV",
+        help="summarize structural and observed pendant-reduction coverage by tree family",
+    )
+    source.add_argument(
         "--import-extension-cache",
         nargs="+",
         metavar="CSV",
@@ -2023,6 +2267,22 @@ def main(argv: list[str]) -> int:
         default="results/pendant_extension_cache.sqlite3",
         help="SQLite database for persistent rooted base certificates (use empty string to disable)",
     )
+    parser.add_argument(
+        "--extension-try-all-paths",
+        action="store_true",
+        help="try every eligible pendant path with one shared node/time budget",
+    )
+    parser.add_argument(
+        "--extension-adaptive-budget",
+        action="store_true",
+        help="raise the pendant-extension budget for the observed five-leaf hard pattern",
+    )
+    parser.add_argument(
+        "--extension-adaptive-nodes",
+        type=int,
+        default=100_000,
+        help="rooted-base budget used by --extension-adaptive-budget",
+    )
     parser.add_argument("--diff-candidates", type=int, help="limit candidate placements per edge difference")
     parser.add_argument("--heuristic-steps", type=int, default=1_000_000, help="swap attempts per heuristic restart")
     parser.add_argument("--heuristic-restarts", type=int, default=50, help="heuristic random restarts")
@@ -2039,6 +2299,10 @@ def main(argv: list[str]) -> int:
     )
     parser.add_argument("--replay-log", help="CSV path for --replay-unsolved results")
     parser.add_argument("--analysis-log", help="CSV path for --analyze-log results")
+    parser.add_argument(
+        "--reduction-summary-output",
+        help="CSV output path for --summarize-reduction",
+    )
     parser.add_argument("--start-case", type=int, default=1, help="first CSV data row to consider in --replay-unsolved")
     parser.add_argument("--max-cases", type=int, help="maximum unsolved cases to replay")
     parser.add_argument("--progress", type=int, default=10, help="print progress every N batch trials")
@@ -2068,6 +2332,8 @@ def main(argv: list[str]) -> int:
             return run_analyze_log(args)
         if args.summarize_log is not None:
             return run_summarize_log(args)
+        if args.summarize_reduction is not None:
+            return run_summarize_reduction(args)
         if args.import_extension_cache is not None:
             if not args.extension_cache_db:
                 raise ValueError("--import-extension-cache requires --extension-cache-db")

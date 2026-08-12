@@ -12,10 +12,12 @@ from graceful_tree import (  # noqa: E402
     build_adj,
     close_pendant_extension_cache,
     five_leaf_nonspider_two_branch,
+    five_leaf_nonspider_three_branch,
     count_five_leaf_three_branch_exact_edges,
     count_five_leaf_two_branch_exact_edges,
     solve_graceful_caterpillar,
     solve_graceful_pendant_extension,
+    is_hard_pendant_extension_pattern,
     verify_labeling,
 )
 
@@ -72,6 +74,40 @@ class GracefulCompressionTests(unittest.TestCase):
         self.assertEqual(cached_stats.strategy, "pendant-extension-cache")
         self.assertEqual(cached_stats.nodes, 0)
         self.assertTrue(verify_labeling(edges, cached_labels))
+
+    def test_pendant_extension_try_all_paths(self):
+        edges = five_leaf_nonspider_two_branch(2, (1, 1), (9, 11, 11))
+        adj = build_adj(len(edges) + 1, edges)
+
+        labels, stats = solve_graceful_pendant_extension(
+            adj, max_nodes=2_000, try_all_paths=True
+        )
+        self.assertIsNotNone(labels)
+        self.assertIn(stats.strategy, {"pendant-extension", "pendant-extension-multi"})
+        self.assertTrue(verify_labeling(edges, labels))
+
+    def test_pendant_extension_try_all_paths_handles_budget_exhaustion(self):
+        edges = five_leaf_nonspider_two_branch(2, (1, 1), (9, 11, 11))
+        adj = build_adj(len(edges) + 1, edges)
+
+        labels, stats = solve_graceful_pendant_extension(
+            adj, max_nodes=1, try_all_paths=True
+        )
+        self.assertIsNone(labels)
+        self.assertEqual(stats.strategy, "pendant-extension-multi")
+        self.assertLessEqual(stats.nodes, 1)
+
+    def test_hard_pendant_extension_pattern_detection(self):
+        hard_edges = five_leaf_nonspider_two_branch(2, (1, 1), (11, 23, 23))
+        ordinary_edges = five_leaf_nonspider_two_branch(2, (1, 1), (4, 8, 30))
+        three_branch_hard_edges = five_leaf_nonspider_three_branch(2, 3, (1, 3), 16, (13, 15))
+        self.assertTrue(is_hard_pendant_extension_pattern(build_adj(len(hard_edges) + 1, hard_edges)))
+        self.assertFalse(is_hard_pendant_extension_pattern(build_adj(len(ordinary_edges) + 1, ordinary_edges)))
+        self.assertTrue(
+            is_hard_pendant_extension_pattern(
+                build_adj(len(three_branch_hard_edges) + 1, three_branch_hard_edges)
+            )
+        )
 
     def test_edge_count_formulas(self):
         expected_totals = {

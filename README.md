@@ -52,6 +52,9 @@ Non-spider 5-leaf trees:
   edges = 46: 1293708 / 1293708 solved
   edges = 47: 1479482 / 1479482 solved
   edges = 48-50: 5780094 / 5780094 solved
+  edges = 51-55: 15800467 / 15800487 solved in initial pass
+  edges = 51-55: 20 / 20 timeout cases solved by adaptive replay
+  cumulative through 55: 31897593 covered after replay
 
 Antimagic non-spider 5-leaf trees:
   edges <= 10: 100 / 100 solved
@@ -158,6 +161,23 @@ python src/graceful_tree.py \
   --progress 20000
 ```
 
+The same pendant-path reduction is available for generic input families; it
+is not restricted to the five-leaf enumerator. For example, this runs a small
+lobster batch and lets each tree try all eligible terminal paths under one
+shared budget:
+
+```bash
+python src/graceful_tree.py \
+  --lobster-batch 10000 \
+  --base-vertices 12 \
+  --method compressed \
+  --extension-try-all-paths \
+  --extension-cache-db results/pendant_extension_cache.sqlite3 \
+  --time-limit 30 \
+  --log results/lobster_compressed.csv \
+  --progress 100
+```
+
 ## Tree Families
 
 ### Spider Trees
@@ -213,6 +233,51 @@ speed layer and is limited by `--extension-cache-size`. See
 statistics and the complete `edges <= 20` ablation. Detailed proof notes are
 intentionally not part of this snapshot.
 
+The reduction itself is a sufficient certificate rule for any tree containing
+an eligible pendant path: if the shortened rooted tree has a certificate with
+the retained leaf at an extremal label, the path can be rebuilt one edge at a
+time. The five-leaf non-spider family is only the first family for which this
+repository has an exhaustive enumerator and a large systematic data set. The
+generic sources (`--edges`, `--random`, `--batch`, `--lobster-batch`, and
+`--spider-sweep`) already use the same compressed solver. The optional
+`--extension-try-all-paths` flag asks it to test every eligible pendant path;
+without that flag the historical longest-path fast path is preserved.
+
+This does not claim that every graceful tree must reduce in this way. Trees
+whose useful extension is an internal bridge subdivision, or whose available
+certificate does not put the retained leaf at an extremal label, need a
+different composition lemma or a fallback search.
+
+The exact scope of this rule and the distinction between structural candidates
+and verified certificates are documented in
+[docs/reduction_theorem.md](docs/reduction_theorem.md). Reduction coverage can
+be aggregated from one or more CSV logs without rerunning the solver:
+
+```bash
+python src/graceful_tree.py \
+  --summarize-reduction results/five_leaf_nonspider_edges48_50_compressed.csv \
+  --reduction-summary-output results/reduction_48_50.csv
+```
+
+The controlled hard-pattern comparison is implemented in
+`src/hard_pattern_experiment.py`. It fixes a two-branch tree with bridge 2,
+two pendant paths of length 1, and three sorted long paths `(a,b,c)`. The
+experiment compares ordinary branch search with 2,000-node and 20,000-node
+pendant-reduction fast paths, while recording edge count modulo 3.
+The completed comparison is summarized in
+[docs/hard_pattern_experiment_report.md](docs/hard_pattern_experiment_report.md).
+The six remaining boundary cases have a separate targeted experiment in
+`src/hard_boundary_experiment.py`.
+That replay solved all six with a 100,000-node rooted-base budget; all-paths
+search did not improve on the single longest-path choice.
+
+The main solver now has an opt-in adaptive budget for this observed pattern:
+`--extension-adaptive-budget` raises the rooted-base budget to
+`--extension-adaptive-nodes` (100,000 by default) only when the tree matches
+the structural signature: five leaves, two or three branch vertices, at least
+two terminal paths of length at most 3, and three remaining terminal paths of
+length at least 9. The default compressed behavior is unchanged.
+
 Recoverable certificates from older compressed CSV logs can be imported with
 `--import-extension-cache`; this lets later runs reuse certificates after a
 restart. The importer validates the recovered rooted certificate before
@@ -224,6 +289,12 @@ The latest compressed 48-50 run enumerated 5,780,094 trees but recorded only
 and took about 4 hours 56 minutes. See
 [docs/current_results.md](docs/current_results.md) for the strategy breakdown
 and the comparison with the uncompressed branch search.
+
+The subsequent 51-55 run enumerated 15,800,487 trees. Its initial pass left
+20 timeout rows; a targeted adaptive replay solved all 20, and all 20 replay
+certificates passed the independent verifier. The adaptive rule raises the
+rooted-base budget only for a recurring five-leaf hard signature, leaving the
+historical default unchanged for other trees.
 
 For antimagic labeling, the current framework uses deterministic branch-first
 edge-label search and, only after a primary timeout, randomized fallback trials.

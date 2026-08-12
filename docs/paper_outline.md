@@ -75,6 +75,13 @@ segment. Rooted base certificates are canonicalized and reused across
 isomorphic cases. A complete run through 20 edges reduced search nodes from
 3,822,923 to 435,073 while independently verifying all 20,119 certificates.
 
+The later 51--55 run added an opt-in adaptive fastpath for a recurrent hard
+signature. The initial pass covered 15,800,487 trees and left 20 timeout rows;
+a targeted replay solved all 20. In a separate 4,327-case controlled family,
+the apparent `edges mod 3 = 2` difficulty was strong for ordinary branch
+search but almost disappeared after pendant reduction. A 100,000-node
+rooted-base budget solved the six remaining boundary cases.
+
 ## 5. Antimagic Search
 
 The antimagic solver labels edges by a permutation of `1..m` and checks that
@@ -117,6 +124,7 @@ edges <= 45: 7543822 / 7543822 solved
 edges = 46: 1293708 / 1293708 solved
 edges = 47: 1479482 / 1479482 solved
 edges = 48-50: 5780094 / 5780094 solved
+edges = 51-55: 15800487 enumerated; 20 initial timeouts; 20 solved by replay
 ```
 
 The compressed 48-50 run enumerated 5,780,094 trees but produced only
