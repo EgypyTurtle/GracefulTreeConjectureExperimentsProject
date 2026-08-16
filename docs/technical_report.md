@@ -443,6 +443,59 @@ length at most 3, and three remaining terminal paths of length at least 9.
 This is an algorithmic rule motivated by the replay data, not a mathematical
 theorem.
 
+The next compressed interval, edges 56--60, completed the current graceful
+five-leaf line:
+
+```text
+edge count   cases       first pass solved   replayed timeouts   final solved
+56           4,396,261   4,396,259          2                   4,396,261
+57           4,905,851   4,905,841         10                   4,905,851
+58           5,463,653   5,463,653          0                   5,463,653
+59           6,073,447   6,073,446          1                   6,073,447
+60           6,738,836   6,738,809         27                   6,738,836
+total       27,578,048  27,578,008         40                  27,578,048
+```
+
+The 56--57 timeout rows were solved by the earlier all-paths replay. The
+58--60 first pass contained 28 timeout rows; a second all-paths replay solved
+all 28 with `pendant-extension`. Across those 28 rows, the first pass used
+448,244,942 search nodes, while replay used 92,835, a node reduction of about
+4,828x. The independent verifier checked all 28 replay certificates with
+`bad=0`.
+
+The final graceful total through 60 edges is:
+
+```text
+cases covered after replay = 59,475,641
+solved certificates         = 59,475,641
+unresolved                  = 0
+```
+
+The 58--60 result is still a computational result for the non-spider
+five-leaf family. It does not cover all trees with up to 60 edges.
+
+## 6.1 Vertex-Bounded Certificate Prototype
+
+To explore the separate question of trees with more than 35 vertices, the
+repository now contains `src/rooted_extension_experiment.py`. It generates
+rooted tree types and tests a one-leaf gap certificate: shift old labels across
+a chosen gap, assign the new leaf the gap label, and independently verify the
+resulting graceful labeling.
+
+Through 13 vertices the prototype processed 20,299 rooted types:
+
+```text
+extension certificates reused = 18,908
+direct searches               = 1,391
+timeouts or unsolved          = 0
+reuse rate                    = 93.15%
+```
+
+This is a certificate-reuse experiment, not an exhaustive verification of all
+free trees through 40 vertices. The intended route is to combine it with
+fixed-leaf reduced skeletons and leaf-count strata. Raw enumeration of all
+nonisomorphic trees in the 36--40 vertex range is not a practical first step.
+
 ## 7. Second Case Study: Antimagic Labeling
 
 An antimagic labeling of a graph with `m` edges is a bijection from the edge set

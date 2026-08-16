@@ -382,3 +382,72 @@ The next incremental run contains 9,302,112 cases:
 If the run is interrupted, retain the SQLite cache and use a continuation log
 with `--skip-solved-from` rather than discarding the completed rows. Timeout
 rows can then be replayed with the same adaptive options.
+
+For the completed 56-57 run, the initial log contained 12 unsolved rows. The
+following targeted replay solved them without rerunning the other 9.3 million
+cases:
+
+```powershell
+& $PY ".\src\graceful_tree.py" `
+  --replay-unsolved ".\results\five_leaf_nonspider_edges56_57_adaptive.csv" `
+  --method compressed `
+  --extension-fastpath-nodes 100000 `
+  --extension-try-all-paths `
+  --extension-cache-db ".\results\pendant_extension_cache.sqlite3" `
+  --time-limit 60 `
+  --total-time-limit 900 `
+  --replay-log ".\results\replay_edges56_57_fastpath100k_allpaths.csv" `
+  --progress 1
+```
+
+The replay reported `replayed=12, solved=12, still_unsolved=0`. Audit the
+certificates with:
+
+```powershell
+& $PY ".\src\verify_certificates.py" `
+  --log ".\results\replay_edges56_57_fastpath100k_allpaths.csv" `
+  --kind graceful
+```
+
+## Completed 58--60 Replay
+
+The first pass through edges 58--60 produced 18,275,936 rows and 28 timeout
+rows. The targeted replay solved all 28:
+
+```powershell
+& $PY ".\src\graceful_tree.py" `
+  --replay-unsolved ".\results\five_leaf_nonspider_edges58_60_adaptive.csv" `
+  --method compressed `
+  --extension-fastpath-nodes 100000 `
+  --extension-try-all-paths `
+  --extension-cache-db ".\results\pendant_extension_cache.sqlite3" `
+  --time-limit 600 `
+  --total-time-limit 14400 `
+  --replay-log ".\results\replay_edges58_60_allpaths_600.csv" `
+  --progress 1
+```
+
+The replay reported `replayed=28, solved=28, still_unsolved=0`. The first-pass
+timeout rows used 448,244,942 search nodes in total; replay used 92,835. Keep
+both logs when reporting the result.
+
+## Current Research Loop
+
+The next graceful-tree stages are deliberately separated:
+
+1. Continue the five-leaf non-spider family above 60 edges only after the
+   58--60 timeout structures have been recorded and classified.
+2. Generalize the hard-pattern detector for the three-branch unbalanced
+   structures found at 60 edges, then replay those cases with the resulting
+   budget/search-order rule.
+3. Continue the vertex-bounded rooted-certificate experiment beyond 13
+   vertices, beginning with 14, while recording direct-search reduction and
+   certificate-closure rates.
+4. Connect the generic rooted certificates to fixed-leaf reduced skeletons.
+   This is the route toward covering more than the current five-leaf slice;
+   it is not a reason to attempt raw enumeration of every tree through 40
+   vertices.
+
+Each stage follows the same rule: enumerate a defined family, preserve a
+certificate for every solved case, classify timeout structures, formulate a
+reduction that can be independently checked, and only then expand the family.

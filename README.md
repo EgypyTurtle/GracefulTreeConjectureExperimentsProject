@@ -14,6 +14,7 @@ This repository contains:
 - Dedicated search methods for spider trees and branch-structured trees.
 - Constructive compression using caterpillar alpha-labelings, extremal
   pendant-path extension, and rooted-certificate reuse.
+- A separate rooted-tree gap-certificate experiment for vertex-bounded search.
 - Reproducible command lines for expanding bounded tree families.
 - A technical report summarizing algorithms, certificates, and current results.
 
@@ -54,7 +55,18 @@ Non-spider 5-leaf trees:
   edges = 48-50: 5780094 / 5780094 solved
   edges = 51-55: 15800467 / 15800487 solved in initial pass
   edges = 51-55: 20 / 20 timeout cases solved by adaptive replay
-  cumulative through 55: 31897593 covered after replay
+  edges = 56: 4396261 / 4396261 solved after replay
+  edges = 57: 4905851 / 4905851 solved after replay
+  edges = 58: 5463653 / 5463653 solved after replay
+  edges = 59: 6073447 / 6073447 solved after replay
+  edges = 60: 6738836 / 6738836 solved after replay
+  cumulative through 60: 59475641 covered after replay
+
+Rooted-tree gap-certificate experiment:
+  rooted types through 13 vertices: 20299
+  reused extension certificates: 18908
+  direct searches: 1391
+  unresolved rooted types: 0
 
 Antimagic non-spider 5-leaf trees:
   edges <= 10: 100 / 100 solved
@@ -69,6 +81,11 @@ Antimagic non-spider 5-leaf trees:
 The 5-leg spider family is already covered by known theoretical results, so
 the more interesting current direction is the non-spider 5-leaf family and
 hard-pattern behavior in labeling search.
+
+The vertex-bounded experiment is intentionally a separate prototype. It does
+not claim an exhaustive verification of all trees through 40 vertices. It
+tests whether graceful labelings can be propagated through verified rooted
+one-leaf gap certificates before a general free-tree enumeration is attempted.
 
 ## Requirements
 
@@ -295,6 +312,14 @@ The subsequent 51-55 run enumerated 15,800,487 trees. Its initial pass left
 certificates passed the independent verifier. The adaptive rule raises the
 rooted-base budget only for a recurring five-leaf hard signature, leaving the
 historical default unchanged for other trees.
+
+The next 56-57 run enumerated 9,302,112 trees. Its initial pass solved
+9,302,100 and left 12 timeout rows. A targeted replay using a 100,000-node
+rooted-base budget and all eligible pendant paths solved all 12; the independent
+verifier reported `checked_solved=12, bad=0`. The final covered total through
+57 edges is 41,199,705 solved certificates, with 0 unresolved after replay.
+The first-pass and replay logs remain separate so the timeout reduction is
+auditable.
 
 For antimagic labeling, the current framework uses deterministic branch-first
 edge-label search and, only after a primary timeout, randomized fallback trials.
