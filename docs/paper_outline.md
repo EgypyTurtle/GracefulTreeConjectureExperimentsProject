@@ -124,8 +124,22 @@ edges <= 45: 7543822 / 7543822 solved
 edges = 46: 1293708 / 1293708 solved
 edges = 47: 1479482 / 1479482 solved
 edges = 48-50: 5780094 / 5780094 solved
-edges = 51-55: 15800487 enumerated; 20 initial timeouts; 20 solved by replay
+edges = 51-55: 15800487 / 15800487 solved
+edges = 56: 4396261 / 4396261 solved
+edges = 57: 4905851 / 4905851 solved
+edges = 58: 5463653 / 5463653 solved
+edges = 59: 6073447 / 6073447 solved
+edges = 60: 6738836 / 6738836 solved
+edges = 61: 107619 / 107619 solved
+edges = 62: 8252989 / 8252989 solved
 ```
+
+The cumulative total through 62 edges is 67,836,249 solved cases. The final
+edge-62 replay set consisted of 12 cases solved with a 600-second compressed
+replay, two cases solved with a longer branch replay, and three cases solved
+with the difference-first replay; an independent verifier reported no invalid
+certificates. Edge 63 is the next unstarted bound and contains 9,110,398
+generated cases.
 
 The compressed 48-50 run enumerated 5,780,094 trees but produced only
 2,166,443 distinct rooted reduction bases. The run completed without a
@@ -141,7 +155,10 @@ edges <= 45: 7543822 / 7543822 solved
 edges <= 50: 16097106 / 16097106 solved
 ```
 
-Ongoing runs should be added only after certificate verification.
+Ongoing runs should be added only after certificate verification. The generic
+arbitrary-graph solver is documented as reusable infrastructure, but it is
+kept separate from the tree-conjecture claims and is not presented as an
+automatic enumeration of regular graph families.
 
 ## 8. Hard Cases and Algorithmic Lessons
 

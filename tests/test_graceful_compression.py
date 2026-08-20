@@ -17,6 +17,8 @@ from graceful_tree import (  # noqa: E402
     count_five_leaf_two_branch_exact_edges,
     solve_graceful_caterpillar,
     solve_graceful_pendant_extension,
+    solve_graceful_tension,
+    solve_graceful_unit_arm_two_branch,
     is_hard_pendant_extension_pattern,
     verify_labeling,
 )
@@ -59,6 +61,26 @@ class GracefulCompressionTests(unittest.TestCase):
             next_vertex += 2
         labels, _stats = solve_graceful_caterpillar(build_adj(next_vertex, edges))
         self.assertIsNone(labels)
+
+    def test_tension_first_search_reconstructs_a_graceful_tree(self):
+        edges = five_leaf_nonspider_two_branch(2, (1, 1), (4, 5, 6))
+        labels, stats = solve_graceful_tension(
+            build_adj(len(edges) + 1, edges),
+            time_limit=5,
+        )
+        self.assertEqual(stats.strategy, "tension")
+        self.assertIsNotNone(labels)
+        self.assertTrue(verify_labeling(edges, labels))
+
+    def test_unit_arm_construction_covers_all_bridge_lengths(self):
+        for bridge in range(1, 31):
+            edges = five_leaf_nonspider_two_branch(bridge, (1, 1), (1, 1, 1))
+            labels, stats = solve_graceful_unit_arm_two_branch(
+                build_adj(len(edges) + 1, edges)
+            )
+            self.assertEqual(stats.strategy, "unit-arm-construction")
+            self.assertIsNotNone(labels)
+            self.assertTrue(verify_labeling(edges, labels))
 
     def test_pendant_extension_and_cache(self):
         edges = five_leaf_nonspider_two_branch(2, (1, 1), (9, 11, 11))

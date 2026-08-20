@@ -1,6 +1,6 @@
 # Graceful Tree Computation Technical Report
 
-Date: 2026-08-12
+Date: 2026-08-20
 
 ## 0. Algorithmic Verification Protocol
 
@@ -22,6 +22,10 @@ family while new edge bounds are computationally feasible and while timeout
 cases produce useful search information. If several rounds of targeted
 hard-case optimization no longer improve the unresolved set, the project should
 move to a new family, such as six-leaf trees or another labeling conjecture.
+
+The current five-leaf continuation is complete through 62 edges after replay.
+Edge 63 is the next unstarted layer and is kept separate from the completed
+62-edge accounting below.
 
 The independent verifier is `src/verify_certificates.py`. It checks solved rows
 without invoking the search algorithm. This separates the search heuristic from
@@ -474,7 +478,45 @@ unresolved                  = 0
 The 58--60 result is still a computational result for the non-spider
 five-leaf family. It does not cover all trees with up to 60 edges.
 
-## 6.1 Vertex-Bounded Certificate Prototype
+## 6.1 Results Through 62 Edges
+
+The exact 61--62 continuation contained:
+
+```text
+edge count   cases       final solved   unresolved
+61             107,619      107,619          0
+62           8,252,989    8,252,989          0
+total        8,360,608    8,360,608          0
+```
+
+The 17 remaining 62-edge timeout rows were solved in three replay stages:
+12 by a 600-second compressed replay, 2 by a longer branch replay, and 3 by
+a difference-search replay. The independent verifier reported `bad=0` on all
+17 replay certificates. Together with the completed range through 60, the
+project has covered 67,836,249 non-spider five-leaf cases through 62 edges,
+with no unresolved case after replay.
+
+This remains a bounded computational result for one structured family. It is
+not a proof of the Graceful Tree Conjecture and does not cover all trees with
+62 edges.
+
+## 6.2 Generic Arbitrary-Graph Search
+
+The repository includes `src/graceful_graph.py`, a family-independent solver
+for a simple undirected edge set. It accepts cyclic and disconnected graphs
+and does not assume `m=n-1`. For a graph with `m` edges it searches for
+distinct vertex labels in `0..m` whose edge differences are exactly `1..m`.
+Unlike the tree solver, it permits unused labels when the graph has more edges
+than vertices minus one.
+
+This generic solver is intentionally a baseline. It is normally slower than
+the tree-specific solver because it cannot use tree branch orderings,
+pendant-ray reductions, or rooted tension integration. Its role is to let a
+future, explicitly selected graph-family generator reuse the labeling
+constraints without duplicating the solver. The current project does not treat
+arbitrary regular graphs as an automatic continuation of the tree conjecture.
+
+## 6.3 Vertex-Bounded Certificate Prototype
 
 To explore the separate question of trees with more than 35 vertices, the
 repository now contains `src/rooted_extension_experiment.py`. It generates

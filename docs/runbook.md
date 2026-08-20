@@ -383,6 +383,41 @@ If the run is interrupted, retain the SQLite cache and use a continuation log
 with `--skip-solved-from` rather than discarding the completed rows. Timeout
 rows can then be replayed with the same adaptive options.
 
+For very large ranges, use `--compact-log` for the continuation log. The solver
+still verifies each labeling in memory, but the CSV keeps only the case,
+strategy, reduction, and search statistics instead of repeating the full edge
+list and label list. Keep the original full certificate log and use compact
+logs only for bulk continuation accounting.
+
+The experimental `--method tension` solver searches in the signed
+edge-difference (integer tension) representation. It is complete, but is not
+the default because current benchmarks show a mixed speed profile. Use it for
+paired replay experiments on selected hard cases only; see
+`docs/tension_first_experiment.md`.
+
+Before resuming a disk-heavy run, leave substantial free space on the volume
+containing both the CSV and the SQLite cache. Never overwrite the completed
+CSV; use a new continuation path:
+
+```powershell
+& $PY ".\src\graceful_tree.py" `
+  --five-leaf-nonspider-by-edges 65 `
+  --min-edges 61 `
+  --skip-solved-from ".\results\five_leaf_nonspider_edges61_65_adaptive.csv" `
+  --method compressed `
+  --extension-adaptive-budget `
+  --extension-adaptive-nodes 100000 `
+  --extension-fastpath-nodes 2000 `
+  --extension-cache-db ".\results\pendant_extension_cache.sqlite3" `
+  --compact-log `
+  --time-limit 300 `
+  --total-time-limit 604800 `
+  --log ".\results\five_leaf_nonspider_edges61_65_recovery_compact.csv" `
+  --save-hardest ".\results\hardest_edges61_65_recovery.txt" `
+  --save-failed ".\results\failed_edges61_65_recovery.txt" `
+  --progress 20000
+```
+
 For the completed 56-57 run, the initial log contained 12 unsolved rows. The
 following targeted replay solved them without rerunning the other 9.3 million
 cases:
@@ -397,6 +432,23 @@ cases:
   --time-limit 60 `
   --total-time-limit 900 `
   --replay-log ".\results\replay_edges56_57_fastpath100k_allpaths.csv" `
+  --progress 1
+```
+
+Compact edge-indexed five-leaf logs can also be replayed directly. When the
+CSV has no `edges` column, the replay reconstructs the tree from each canonical
+`fiveleaf2e-*` or `fiveleaf3e-*` case name and writes a full replay log:
+
+```powershell
+& $PY ".\src\graceful_tree.py" `
+  --replay-unsolved ".\results\five_leaf_nonspider_edges61_65_recovery_compact.csv" `
+  --method compressed `
+  --extension-adaptive-budget `
+  --extension-adaptive-nodes 300000 `
+  --extension-fastpath-nodes 2000 `
+  --extension-cache-db ".\results\pendant_extension_cache.sqlite3" `
+  --time-limit 600 `
+  --replay-log ".\results\edges62_timeout_replay600.csv" `
   --progress 1
 ```
 
@@ -435,18 +487,16 @@ both logs when reporting the result.
 
 The next graceful-tree stages are deliberately separated:
 
-1. Continue the five-leaf non-spider family above 60 edges only after the
-   58--60 timeout structures have been recorded and classified.
-2. Generalize the hard-pattern detector for the three-branch unbalanced
-   structures found at 60 edges, then replay those cases with the resulting
+1. Continue the five-leaf non-spider family with edges 63--65 only. Edge 62
+   is complete after replay and must not be rerun.
+2. Generalize the hard-pattern detector for the unbalanced three-branch
+   structures found at 62 edges, then replay affected cases with the resulting
    budget/search-order rule.
-3. Continue the vertex-bounded rooted-certificate experiment beyond 13
-   vertices, beginning with 14, while recording direct-search reduction and
-   certificate-closure rates.
-4. Connect the generic rooted certificates to fixed-leaf reduced skeletons.
-   This is the route toward covering more than the current five-leaf slice;
-   it is not a reason to attempt raw enumeration of every tree through 40
-   vertices.
+3. Implement and validate the canonical reduced-skeleton generator for the
+   six-leaf tree line before starting a long 6--20 leaf run.
+4. Keep the generic arbitrary-graph solver as infrastructure. Select a public
+   unicyclic or cubic question before adding any graph-family generator or
+   launching a regular-graph computation.
 
 Each stage follows the same rule: enumerate a defined family, preserve a
 certificate for every solved case, classify timeout structures, formulate a

@@ -895,6 +895,180 @@ def solve_graceful_branch_differences(
     return None, stats
 
 
+def solve_graceful_tension(
+    adj: list[list[int]],
+    time_limit: float | None = None,
+    seed: int | None = None,
+    max_candidates_per_diff: int | None = None,
+    max_nodes: int | None = None,
+) -> tuple[list[int] | None, SearchStats]:
+    """Search in the exact tension representation of a graceful tree.
+
+    Root the tree at a candidate zero-labelled vertex.  Each rooted edge is
+    assigned a signed difference, and the child label is obtained by
+    integrating that difference from the parent.  The largest difference is
+    forced first: in every graceful labeling it joins labels 0 and m.
+
+    This is an experimental alternative to vertex-first and disconnected
+    edge-difference search.  It is complete because every graceful labeling
+    has a unique zero vertex and an incident edge of difference m.
+    """
+    n = len(adj)
+    m = n - 1
+    stats = SearchStats(started_at=time.time(), strategy="tension")
+    if n == 0:
+        return None, stats
+    if n == 1:
+        return [0], stats
+
+    rng = random.Random(seed)
+    root_candidates = sorted(range(n), key=lambda u: (-len(adj[u]), u))
+    if seed is not None:
+        rng.shuffle(root_candidates)
+
+    def timed_out() -> bool:
+        if max_nodes is not None and stats.nodes >= max_nodes:
+            return True
+        return time_limit is not None and time.time() - stats.started_at >= time_limit
+
+    for root in root_candidates:
+        if timed_out():
+            break
+
+        parent = [-1] * n
+        depth = [-1] * n
+        order: list[int] = []
+        queue: deque[int] = deque([root])
+        parent[root] = root
+        depth[root] = 0
+        while queue:
+            vertex = queue.popleft()
+            order.append(vertex)
+            children = [child for child in adj[vertex] if parent[child] == -1]
+            children.sort(key=lambda child: (-len(adj[child]), child))
+            for child in children:
+                parent[child] = vertex
+                depth[child] = depth[vertex] + 1
+                queue.append(child)
+
+        children_of = [[] for _ in range(n)]
+        for vertex in order:
+            if vertex != root:
+                children_of[parent[vertex]].append(vertex)
+
+        subtree_size = [1] * n
+        for vertex in reversed(order[1:]):
+            subtree_size[parent[vertex]] += subtree_size[vertex]
+
+        labels = [-1] * n
+        labels[root] = 0
+        used_label = [False] * (m + 1)
+        used_label[0] = True
+        used_diff = [False] * (m + 1)
+
+        def frontier() -> list[int]:
+            return [
+                vertex
+                for vertex in order
+                if vertex != root
+                and labels[vertex] == -1
+                and labels[parent[vertex]] != -1
+            ]
+
+        def candidates(vertex: int) -> list[tuple[int, int, int]]:
+            parent_label = labels[parent[vertex]]
+            moves: list[tuple[int, int, int]] = []
+            for difference in range(m, 0, -1):
+                if used_diff[difference]:
+                    continue
+                for sign in (1, -1):
+                    child_label = parent_label + sign * difference
+                    if not 0 <= child_label <= m or used_label[child_label]:
+                        continue
+                    moves.append((difference, sign, child_label))
+            if seed is not None:
+                rng.shuffle(moves)
+            moves.sort(
+                key=lambda move: (
+                    -move[0],
+                    -max(move[2], m - move[2]),
+                    move[2],
+                    move[1],
+                )
+            )
+            if max_candidates_per_diff is not None:
+                return moves[:max_candidates_per_diff]
+            return moves
+
+        def frontier_feasible() -> bool:
+            for vertex in frontier():
+                if not candidates(vertex):
+                    return False
+            return True
+
+        def choose_frontier() -> int | None:
+            available = frontier()
+            if not available:
+                return None
+            scored = []
+            for vertex in available:
+                # Prefer edges that expose a large unfinished subtree and a
+                # branch vertex, while retaining a small candidate domain.
+                domain = len(candidates(vertex))
+                scored.append(
+                    (
+                        domain,
+                        -subtree_size[vertex],
+                        -int(bool(children_of[vertex])),
+                        -depth[vertex],
+                        vertex,
+                    )
+                )
+            scored.sort()
+            return scored[0][-1]
+
+        def backtrack(assigned_edges: int) -> bool:
+            if timed_out():
+                return False
+            stats.nodes += 1
+            if assigned_edges == m:
+                return all(label != -1 for label in labels) and all(used_diff[1:])
+
+            vertex = choose_frontier()
+            if vertex is None:
+                stats.backtracks += 1
+                return False
+
+            moves = candidates(vertex)
+            for difference, sign, child_label in moves:
+                labels[vertex] = child_label
+                used_label[child_label] = True
+                used_diff[difference] = True
+                if frontier_feasible() and backtrack(assigned_edges + 1):
+                    return True
+                used_diff[difference] = False
+                used_label[child_label] = False
+                labels[vertex] = -1
+            stats.backtracks += 1
+            return False
+
+        # The edge of difference m must join the vertices labelled 0 and m.
+        # With this root fixed at 0, it must be one of the root's children.
+        for max_child in children_of[root]:
+            if timed_out():
+                break
+            labels[max_child] = m
+            used_label[m] = True
+            used_diff[m] = True
+            if frontier_feasible() and backtrack(1):
+                return labels[:], stats
+            used_diff[m] = False
+            used_label[m] = False
+            labels[max_child] = -1
+
+    return None, stats
+
+
 def pendant_paths(adj: list[list[int]]) -> list[list[int]]:
     """Return maximal anchor-to-leaf paths whose internal vertices have degree 2."""
     paths: list[list[int]] = []
@@ -1146,6 +1320,75 @@ def solve_graceful_caterpillar(adj: list[list[int]]) -> tuple[list[int] | None, 
     return labels, stats
 
 
+def solve_graceful_unit_arm_two_branch(
+    adj: list[list[int]],
+) -> tuple[list[int] | None, SearchStats]:
+    """Construct the infinite two-branch family with five unit arms.
+
+    The two branch vertices have degrees 3 and 4, all five terminal arms have
+    length one, and the branch vertices may be joined by an arbitrary path.
+    The alternating bridge labels split the edge differences into
+    ``{1,2}``, the bridge block ``{3,...,q+2}``, and
+    ``{q+3,...,q+5}``.
+    """
+    started_at = time.time()
+    stats = SearchStats(started_at=started_at, strategy="unit-arm-construction")
+    branch_vertices = [vertex for vertex, neighbors in enumerate(adj) if len(neighbors) >= 3]
+    if len(branch_vertices) != 2:
+        return None, stats
+    degree_three = [vertex for vertex in branch_vertices if len(adj[vertex]) == 3]
+    degree_four = [vertex for vertex in branch_vertices if len(adj[vertex]) == 4]
+    if len(degree_three) != 1 or len(degree_four) != 1:
+        return None, stats
+    left, right = degree_three[0], degree_four[0]
+
+    parent = {left: -1}
+    queue: deque[int] = deque([left])
+    while queue and right not in parent:
+        vertex = queue.popleft()
+        for neighbor in adj[vertex]:
+            if neighbor in parent:
+                continue
+            parent[neighbor] = vertex
+            queue.append(neighbor)
+    if right not in parent:
+        return None, stats
+    bridge_path = [right]
+    while bridge_path[-1] != left:
+        bridge_path.append(parent[bridge_path[-1]])
+    bridge_path.reverse()
+    bridge_set = set(bridge_path)
+    left_leaves = [vertex for vertex in adj[left] if vertex not in bridge_set]
+    right_leaves = [vertex for vertex in adj[right] if vertex not in bridge_set]
+    if len(left_leaves) != 2 or len(right_leaves) != 3:
+        return None, stats
+    if any(len(adj[vertex]) != 1 for vertex in left_leaves + right_leaves):
+        return None, stats
+
+    q = len(bridge_path) - 1
+    m = len(adj) - 1
+    labels = [-1] * len(adj)
+    if q % 2:
+        r = (q - 1) // 2
+        labels[right] = 0
+        labels[left] = r + 3
+        for index, vertex in enumerate(bridge_path[1:-1], 1):
+            labels[vertex] = r + 3 + index // 2 if index % 2 == 0 else r - (index - 1) // 2
+    else:
+        r = q // 2
+        labels[right] = 0
+        labels[left] = r
+        for index, vertex in enumerate(bridge_path[1:-1], 1):
+            labels[vertex] = r - index // 2 if index % 2 == 0 else r + 3 + (index - 1) // 2
+    for label, vertex in zip((r + 1, r + 2), sorted(left_leaves)):
+        labels[vertex] = label
+    for label, vertex in zip((m - 2, m - 1, m), sorted(right_leaves)):
+        labels[vertex] = label
+    if sorted(labels) != list(range(m + 1)):
+        return None, stats
+    return labels, stats
+
+
 def spider_paths_from_adj(adj: list[list[int]]) -> tuple[int, list[list[int]]]:
     n = len(adj)
     centers = [u for u in range(n) if len(adj[u]) > 2]
@@ -1268,6 +1511,9 @@ def solve_tree(adj: list[list[int]], args: argparse.Namespace, seed: int | None 
         labels, stats = solve_graceful_caterpillar(adj)
         if labels is not None:
             return labels, stats
+        labels, stats = solve_graceful_unit_arm_two_branch(adj)
+        if labels is not None:
+            return labels, stats
     if args.method == "compressed":
         adaptive_budget = bool(
             getattr(args, "extension_adaptive_budget", False)
@@ -1322,6 +1568,13 @@ def solve_tree(adj: list[list[int]], args: argparse.Namespace, seed: int | None 
         )
     if args.method == "branch":
         return solve_graceful_branch_differences(
+            adj,
+            time_limit=args.time_limit,
+            seed=seed,
+            max_candidates_per_diff=args.diff_candidates,
+        )
+    if args.method == "tension":
+        return solve_graceful_tension(
             adj,
             time_limit=args.time_limit,
             seed=seed,
@@ -1431,6 +1684,52 @@ def parse_edge_string(text: str) -> list[Edge]:
         left, right = token.split("-", 1)
         edges.append((int(left), int(right)))
     return edges
+
+
+def reconstruct_named_five_leaf_case(case_name: str) -> tuple[int, list[Edge]]:
+    """Reconstruct an edge-indexed five-leaf case from its canonical name.
+
+    Compact batch logs intentionally omit the edge and label columns. The
+    edge-indexed case names contain the complete composition data, so replay
+    can rebuild the same vertex numbering without scanning the generator.
+    """
+    prefix, separator, payload = case_name.partition("-")
+    if not separator or prefix not in {"fiveleaf2e", "fiveleaf3e"}:
+        raise ValueError(
+            f"compact replay needs an edge-indexed five-leaf case name, got {case_name!r}"
+        )
+    try:
+        values = tuple(int(part) for part in payload.split("-"))
+    except ValueError as exc:
+        raise ValueError(f"bad edge-indexed five-leaf case name: {case_name!r}") from exc
+
+    if prefix == "fiveleaf2e":
+        if len(values) != 7:
+            raise ValueError(f"bad fiveleaf2e case name: {case_name!r}")
+        total_edges, bridge, left_a, left_b, right_a, right_b, right_c = values
+        edges = five_leaf_nonspider_two_branch(
+            bridge,
+            (left_a, left_b),
+            (right_a, right_b, right_c),
+        )
+    else:
+        if len(values) != 8:
+            raise ValueError(f"bad fiveleaf3e case name: {case_name!r}")
+        total_edges, left_bridge, right_bridge, left_a, left_b, middle, right_a, right_b = values
+        edges = five_leaf_nonspider_three_branch(
+            left_bridge,
+            right_bridge,
+            (left_a, left_b),
+            middle,
+            (right_a, right_b),
+        )
+
+    if len(edges) != total_edges:
+        raise ValueError(
+            f"case name/edge mismatch for {case_name!r}: "
+            f"name says {total_edges} edges, reconstructed {len(edges)}"
+        )
+    return total_edges + 1, edges
 
 
 def tree_features(n: int, edges: list[Edge]) -> dict[str, int]:
@@ -1558,9 +1857,9 @@ def run_cases(
         "nodes",
         "backtracks",
         "elapsed_seconds",
-        "edges",
-        "labels",
     ]
+    if not args.compact_log:
+        fieldnames.extend(["edges", "labels"])
 
     with open(log_path, "w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -1574,8 +1873,7 @@ def run_cases(
                 break
             if args.max_vertices is not None and n > args.max_vertices:
                 skipped += 1
-                writer.writerow(
-                    {
+                row = {
                         "case": case_name,
                         "vertices": n,
                         "seed": "" if case_seed is None else case_seed,
@@ -1587,10 +1885,10 @@ def run_cases(
                         "nodes": 0,
                         "backtracks": 0,
                         "elapsed_seconds": "0.000000",
-                        "edges": edge_string(edges),
-                        "labels": "",
                     }
-                )
+                if not args.compact_log:
+                    row.update({"edges": edge_string(edges), "labels": ""})
+                writer.writerow(row)
                 if args.progress and (checked + skipped == 1 or (checked + skipped) % args.progress == 0):
                     print(
                         f"case {checked + skipped}: solved={solved}, timeouts={timeouts}, "
@@ -1612,8 +1910,7 @@ def run_cases(
                 write_edge_file(hard_path, edges)
             if not ok:
                 write_edge_file(failed_path, edges)
-            writer.writerow(
-                {
+            row = {
                     "case": case_name,
                     "vertices": n,
                     "seed": "" if case_seed is None else case_seed,
@@ -1625,10 +1922,10 @@ def run_cases(
                     "nodes": stats.nodes,
                     "backtracks": stats.backtracks,
                     "elapsed_seconds": f"{elapsed:.6f}",
-                    "edges": edge_string(edges),
-                    "labels": label_string(labels),
                 }
-            )
+            if not args.compact_log:
+                row.update({"edges": edge_string(edges), "labels": label_string(labels)})
+            writer.writerow(row)
             f.flush()
             if args.progress and (checked == 1 or checked % args.progress == 0):
                 rate = checked / max(time.time() - started, 1e-9)
@@ -1901,8 +2198,18 @@ def run_replay_unsolved(args: argparse.Namespace) -> int:
                 print(f"stopping: total time limit reached after {replayed} replayed cases")
                 break
 
-            edges = parse_edge_string(row["edges"])
-            n = int(row["vertices"]) if row.get("vertices") else 1 + max(max(u, v) for u, v in edges)
+            edge_text = row.get("edges", "").strip()
+            if edge_text:
+                edges = parse_edge_string(edge_text)
+                reconstructed_n = 1 + max(max(u, v) for u, v in edges) if edges else args.base_vertices
+            else:
+                reconstructed_n, edges = reconstruct_named_five_leaf_case(row.get("case", ""))
+            n = int(row["vertices"]) if row.get("vertices") else reconstructed_n
+            if n != reconstructed_n:
+                raise ValueError(
+                    f"CSV vertex count disagrees with reconstructed case {row.get('case', '')!r}: "
+                    f"row has {n}, reconstructed {reconstructed_n}"
+                )
             if args.max_vertices is not None and n > args.max_vertices:
                 skipped += 1
                 writer.writerow(
@@ -2232,7 +2539,10 @@ def main(argv: list[str]) -> int:
         help="count non-spider 5-leaf trees by exact edge count without running search",
     )
     source.add_argument("--lobster-batch", type=int, metavar="TRIALS", help="run many random lobster-tree trials")
-    source.add_argument("--replay-unsolved", help="CSV log to replay rows with solved=0")
+    source.add_argument(
+        "--replay-unsolved",
+        help="CSV log to replay rows with solved=0; compact edge-indexed five-leaf logs are supported",
+    )
     source.add_argument("--analyze-log", help="CSV log to analyze tree structure features")
     source.add_argument("--summarize-log", help="CSV log to summarize solved/timeouts and hardest cases")
     source.add_argument(
@@ -2258,7 +2568,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--direct-base-leaves", type=int, default=1, help="max direct leaves attached to each lobster base vertex")
     parser.add_argument("--seed", type=int, help="random seed")
     parser.add_argument("--time-limit", type=float, default=None, help="seconds before giving up")
-    parser.add_argument("--method", choices=["exact", "spider", "branch", "compressed", "diff", "heuristic", "hybrid"], default="exact", help="search method")
+    parser.add_argument("--method", choices=["exact", "spider", "branch", "tension", "compressed", "diff", "heuristic", "hybrid"], default="exact", help="search method")
     parser.add_argument("--no-constructive-fastpath", action="store_true", help="disable direct caterpillar labeling before search")
     parser.add_argument("--extension-fastpath-nodes", type=int, default=2_000, help="node budget for the pendant-extension base search")
     parser.add_argument("--extension-cache-size", type=int, default=100_000, help="maximum rooted base certificates kept in memory")
@@ -2290,6 +2600,11 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--max-vertices", type=int, help="skip generated batch cases above this many vertices")
     parser.add_argument("--min-edges", type=int, default=6, help="first edge count for --five-leaf-nonspider-by-edges")
     parser.add_argument("--log", help="CSV path for --batch results")
+    parser.add_argument(
+        "--compact-log",
+        action="store_true",
+        help="omit per-case edges and labels from batch CSVs; verification still happens in memory",
+    )
     parser.add_argument("--save-hardest", help="edge-list path for the hardest tree seen in --batch")
     parser.add_argument("--save-failed", help="edge-list path for the latest failed/timeout tree")
     parser.add_argument(

@@ -69,7 +69,7 @@ non-gracefulness.
 Run the first benchmark with:
 
 ```powershell
-$PY="C:\Users\56257\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
+$PY="python"
 & $PY ".\src\rooted_extension_experiment.py" `
   --max-vertices 10 `
   --time-limit 2 `

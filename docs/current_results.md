@@ -1,6 +1,6 @@
 # Current Computational Results
 
-Date: 2026-08-13
+Date: 2026-08-20
 
 This page records the current public status of the graceful-labeling
 experiments. It focuses on the computational reduction and acceleration
@@ -224,6 +224,56 @@ first-pass search and targeted certificate recovery is auditable:
 results/five_leaf_nonspider_edges58_60_adaptive.csv
 results/replay_edges58_60_allpaths_600.csv
 ```
+
+## Results Through 62 Edges
+
+The 61--62 continuation was interrupted before edge 63 and was recovered from
+the first-pass and compact recovery logs. The exact layer counts are:
+
+```text
+edge count   cases       recovery/replay status                 final solved
+61             107,619   all recovery rows solved                  107,619
+62           8,252,989   17 final timeouts replayed by 3 methods  8,252,989
+total        8,360,608                                           8,360,608
+```
+
+The 17 remaining 62-edge cases were split across the replay logs as follows:
+
+```text
+replay                               solved   still unresolved   verifier bad
+edges62_timeout_replay600.csv          12             5                0
+edges62_timeout_replay1800_branch.csv   2             3                0
+edges62_timeout_replay_diff600...       3             0                0
+```
+
+The final three cases were solved by difference search after the compressed and
+long branch replays. The independent verifier checked all 17 replay
+certificates with `bad=0`. Combining this interval with the completed range
+through 60 gives:
+
+```text
+cases covered after replay: 67,836,249
+solved certificates:        67,836,249
+unresolved:                          0
+```
+
+Edge 63 has not started. Its exact non-spider five-leaf layer contains
+9,110,398 cases. The next run should use a compact log because the local full
+CSV and SQLite cache together are large.
+
+## Generic Graph Search Layer
+
+`src/graceful_graph.py` is a separate baseline solver for an arbitrary simple
+undirected edge set. It does not assume a tree, connectedness, or `m=n-1` and
+checks the ordinary graceful-labeling definition for graphs with unused labels
+in `0..m`. It is tested on cyclic, disconnected, and label-pool boundary
+cases.
+
+This layer is useful infrastructure, not a new claim about the Graceful Tree
+Conjecture. The current research line remains tree-specific. A future graph
+experiment must first choose a public graph-family question, such as a
+unicyclic or connected-cubic family, and then add a family generator that
+calls the generic solver.
 
 ## Vertex-Bounded Certificate Experiment
 

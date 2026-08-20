@@ -1,370 +1,284 @@
-# Graceful Tree Labeling Algorithmic Search
+# Graceful Tree and Graph Labeling Experiments
 
-Certificate-producing search algorithms for graceful and antimagic labelings of
-trees, with emphasis on bounded non-spider 5-leaf trees.
+Certificate-producing search experiments for graceful and antimagic labelings.
+The main research object is the Graceful Tree Conjecture, with emphasis on
+bounded non-spider five-leaf trees. A separate generic edge-set solver is
+included as infrastructure for a future, explicitly chosen graph-family
+problem.
 
-A graceful labeling of a tree with `m` edges assigns distinct vertex labels from
-`0..m` so that the absolute differences on the edges are exactly `1..m`.
+## Scope
 
-This repository contains:
+For a graph with `m` edges, a graceful labeling is an injective vertex
+labeling by values in `0..m` whose absolute edge differences are exactly
+`1..m`.
 
-- A standalone Python search tool: `src/graceful_tree.py`.
-- A standalone antimagic search tool: `src/antimagic_tree.py`.
-- An independent CSV certificate verifier: `src/verify_certificates.py`.
-- Dedicated search methods for spider trees and branch-structured trees.
-- Constructive compression using caterpillar alpha-labelings, extremal
-  pendant-path extension, and rooted-certificate reuse.
-- A separate rooted-tree gap-certificate experiment for vertex-bounded search.
-- Reproducible command lines for expanding bounded tree families.
-- A technical report summarizing algorithms, certificates, and current results.
+The Graceful Tree Conjecture asks whether every finite tree is graceful. This
+repository does not claim to prove it. It records bounded,
+certificate-checked computations and the structural reductions used to make
+those computations practical.
 
-The intended workflow is algorithmic rather than just enumerative:
-
-```text
-expand a bounded 5-leaf family
-  -> solve each case and emit a certificate
-  -> replay and analyze timeout cases
-  -> redesign the search order or fallback around the hard pattern
-  -> repeat until the current family stops producing useful algorithmic data
-```
-
-For solved rows, the CSV log contains the tree and a labeling certificate. The
-verifier checks those rows without using the search algorithm.
-
-## Highlights
-
-The current computations include:
+The two search layers are deliberately separate:
 
 ```text
-5-leg spider trees:
-  max leg <= 15: fully solved computationally
-  max leg 16-20: 29286 / 30876 solved before stopping this line
-
-Non-spider 5-leaf trees:
-  max segment <= 3: 693 / 693 solved
-  max segment <= 4: 4080 / 4080 solved
-  max segment <= 5: 16875 / 16875 solved
-  max segment <= 6: 55062 / 55062 solved
-  max segment <= 7: 151606 / 151606 solved
-  edges <= 30: 399052 / 399052 solved
-  edges <= 35: 1225773 / 1225773 solved
-  edges <= 40: 3224679 / 3224679 solved
-  edges <= 45: 7543822 / 7543822 solved
-  edges = 46: 1293708 / 1293708 solved
-  edges = 47: 1479482 / 1479482 solved
-  edges = 48-50: 5780094 / 5780094 solved
-  edges = 51-55: 15800467 / 15800487 solved in initial pass
-  edges = 51-55: 20 / 20 timeout cases solved by adaptive replay
-  edges = 56: 4396261 / 4396261 solved after replay
-  edges = 57: 4905851 / 4905851 solved after replay
-  edges = 58: 5463653 / 5463653 solved after replay
-  edges = 59: 6073447 / 6073447 solved after replay
-  edges = 60: 6738836 / 6738836 solved after replay
-  cumulative through 60: 59475641 covered after replay
-
-Rooted-tree gap-certificate experiment:
-  rooted types through 13 vertices: 20299
-  reused extension certificates: 18908
-  direct searches: 1391
-  unresolved rooted types: 0
-
-Antimagic non-spider 5-leaf trees:
-  edges <= 10: 100 / 100 solved
-  edges <= 20: 20119 / 20119 solved
-  edges <= 25: 104885 / 104885 solved
-  edges <= 35: 1225773 / 1225773 solved
-  edges <= 40: 3224679 / 3224679 solved
-  edges <= 45: 7543822 / 7543822 solved
-  edges <= 50: 16097106 / 16097106 solved
+tree family generator -> tree-specific solver and reductions
+graph family generator -> generic edge-set solver
 ```
 
-The 5-leg spider family is already covered by known theoretical results, so
-the more interesting current direction is the non-spider 5-leaf family and
-hard-pattern behavior in labeling search.
+The tree solver is the primary tool for the current project. The generic graph
+solver is reusable infrastructure; it does not replace tree-specific
+algorithms.
 
-The vertex-bounded experiment is intentionally a separate prototype. It does
-not claim an exhaustive verification of all trees through 40 vertices. It
-tests whether graceful labelings can be propagated through verified rooted
-one-leaf gap certificates before a general free-tree enumeration is attempted.
+## Current Status
+
+### Graceful non-spider five-leaf trees
+
+The complete non-spider five-leaf family is covered through 62 edges after
+targeted replay of timeout cases:
+
+```text
+edge range       cases        final solved     final unresolved
+<=45             7,543,822    7,543,822        0
+46               1,293,708    1,293,708        0
+47               1,479,482    1,479,482        0
+48-50            5,780,094    5,780,094        0
+51-55           15,800,487   15,800,487        0
+56               4,396,261    4,396,261        0
+57               4,905,851    4,905,851        0
+58               5,463,653    5,463,653        0
+59               6,073,447    6,073,447        0
+60               6,738,836    6,738,836        0
+61                 107,619      107,619        0
+62               8,252,989    8,252,989        0
+```
+
+Cumulative status through 62 edges:
+
+```text
+67,836,249 solved certificates
+0 unresolved after replay
+```
+
+The final five 62-edge cases were recovered by three independent replay
+strategies: 12 by a 600-second compressed replay, 2 by a longer branch replay,
+and 3 by a difference-search replay. The independent verifier reported
+`bad=0` on all three replay logs. Edge 63 is the next unstarted layer and
+contains 9,110,398 cases.
+
+Other recorded experiments:
+
+```text
+5-leg spiders, max leg <=15:        11,628 / 11,628 solved
+5-leg spiders, max leg 16-20:       29,286 / 30,876 solved in the recorded run
+antimagic 5-leaf trees, edges <=50: 16,097,106 / 16,097,106 solved
+rooted types through 13 vertices:   20,299 processed, 0 unresolved
+```
+
+The spider line is primarily solver validation because important spider
+subfamilies already have theoretical coverage. The non-spider five-leaf line
+is the main source of algorithmic and structural data.
+
+See [docs/current_results.md](docs/current_results.md) and
+[docs/technical_report.md](docs/technical_report.md) for the detailed public
+accounting.
+
+## Research Workflow
+
+Each family follows this loop:
+
+```text
+define and enumerate a family
+  -> search and write explicit certificates
+  -> independently verify solved rows
+  -> replay timeout cases
+  -> classify hard structures
+  -> formulate a reduction or search improvement
+  -> implement and test the improvement
+  -> rerun affected cases
+  -> stop or expand only after the bottleneck is understood
+```
+
+The current order is:
+
+1. Finish the five-leaf non-spider line through 65 edges.
+2. Implement a canonical reduced-skeleton generator for 6--20 leaves.
+3. Only then select a specific non-tree graph-family question for the generic
+   graph solver, rather than enumerating arbitrary regular graphs.
+
+See [TODO.md](TODO.md) and
+[docs/research_roadmap.md](docs/research_roadmap.md).
 
 ## Requirements
 
-Python 3.10 or newer is enough. The tool uses only the Python standard library.
+Python 3.10 or newer is sufficient; only the standard library is required.
 
-Check the CLI:
-
-```bash
+```powershell
 python src/graceful_tree.py --help
+python src/graceful_graph.py --help
 python src/antimagic_tree.py --help
 python src/verify_certificates.py --help
 ```
 
-## Examples
+## Tree Search
 
-Solve one spider tree:
+Solve one spider:
 
-```bash
+```powershell
 python src/graceful_tree.py --spider 7 8 10 10 10 --method spider --time-limit 30
 ```
 
-Sweep all non-spider 5-leaf trees whose reduced-edge segment lengths are at
-most 6:
+Run the next exact edge layer with the compressed solver:
 
-```bash
-python src/graceful_tree.py \
-  --five-leaf-nonspider-sweep 6 \
-  --method branch \
-  --time-limit 10 \
-  --log results/five_leaf_nonspider_max6_branch.csv \
-  --save-hardest results/hardest_five_leaf_nonspider_max6_branch.txt \
-  --save-failed results/failed_five_leaf_nonspider_max6_branch.txt \
-  --progress 1000
-```
-
-Summarize a CSV log:
-
-```bash
-python src/graceful_tree.py --summarize-log results/five_leaf_nonspider_max6_branch.csv
-```
-
-Verify graceful certificates from a CSV log:
-
-```bash
-python src/verify_certificates.py \
-  --kind graceful \
-  --log results/five_leaf_nonspider_edges40_branch.csv
-```
-
-Run the antimagic case study on non-spider 5-leaf trees with at most 20 edges:
-
-```bash
-python src/antimagic_tree.py \
-  --five-leaf-nonspider-by-edges 20 \
-  --time-limit 5 \
-  --log results/antimagic_five_leaf_nonspider_edges20.csv \
-  --progress 1000
-```
-
-Verify antimagic certificates from a CSV log:
-
-```bash
-python src/verify_certificates.py \
-  --kind antimagic \
-  --log results/antimagic_five_leaf_nonspider_edges45_fallback.csv
-```
-
-Sweep all non-spider 5-leaf trees with at most 30 edges:
-
-```bash
-python src/graceful_tree.py \
-  --five-leaf-nonspider-by-edges 30 \
-  --method branch \
-  --time-limit 10 \
-  --log results/five_leaf_nonspider_edges30_branch.csv \
-  --save-hardest results/hardest_five_leaf_nonspider_edges30_branch.txt \
-  --save-failed results/failed_five_leaf_nonspider_edges30_branch.txt \
-  --progress 5000
-```
-
-Run the constructive compression method on a new edge interval:
-
-```bash
-python src/graceful_tree.py \
-  --five-leaf-nonspider-by-edges 47 \
-  --min-edges 46 \
-  --method compressed \
-  --time-limit 300 \
-  --log results/five_leaf_nonspider_edges46_47_compressed.csv \
+```powershell
+python src/graceful_tree.py `
+  --five-leaf-nonspider-by-edges 63 `
+  --min-edges 63 `
+  --method compressed `
+  --extension-adaptive-budget `
+  --extension-adaptive-nodes 100000 `
+  --extension-fastpath-nodes 2000 `
+  --extension-cache-size 100000 `
+  --extension-cache-db results/pendant_extension_cache.sqlite3 `
+  --compact-log `
+  --time-limit 300 `
+  --total-time-limit 604800 `
+  --log results/five_leaf_nonspider_edges63_adaptive_compact.csv `
+  --save-hardest results/hardest_edges63_adaptive.txt `
+  --save-failed results/failed_edges63_adaptive.txt `
   --progress 20000
 ```
 
-The same pendant-path reduction is available for generic input families; it
-is not restricted to the five-leaf enumerator. For example, this runs a small
-lobster batch and lets each tree try all eligible terminal paths under one
-shared budget:
+Summarize or replay only unsolved rows:
 
-```bash
-python src/graceful_tree.py \
-  --lobster-batch 10000 \
-  --base-vertices 12 \
-  --method compressed \
-  --extension-try-all-paths \
-  --extension-cache-db results/pendant_extension_cache.sqlite3 \
-  --time-limit 30 \
-  --log results/lobster_compressed.csv \
-  --progress 100
+```powershell
+python src/graceful_tree.py `
+  --summarize-log results/five_leaf_nonspider_edges63_adaptive_compact.csv
+
+python src/graceful_tree.py `
+  --replay-unsolved results/five_leaf_nonspider_edges63_adaptive_compact.csv `
+  --method compressed `
+  --time-limit 600 `
+  --extension-adaptive-budget `
+  --extension-adaptive-nodes 300000 `
+  --extension-cache-db results/pendant_extension_cache.sqlite3 `
+  --replay-log results/five_leaf_nonspider_edges63_replay.csv `
+  --progress 1
 ```
 
-## Tree Families
+Independently verify a solved CSV:
 
-### Spider Trees
+```powershell
+python src/verify_certificates.py `
+  --kind graceful `
+  --log results/five_leaf_nonspider_edges40_branch.csv
+```
 
-A spider tree has one branch vertex and several legs. For example:
+## Tree Families and Methods
+
+After suppressing degree-2 vertices, every non-spider five-leaf tree has one
+of two reduced skeletons:
 
 ```text
-spider-20-20-20-20-20
+degree 3 branch -- degree 4 branch
+degree 3 branch -- degree 3 branch -- degree 3 branch
 ```
 
-means a 5-leg spider with five legs of length 20. It has `100` edges and
-`101` vertices.
+The current CLI is intentionally specialized to five leaves. The planned
+6--20 leaf line needs a new canonical reduced-skeleton generator; changing a
+number in the five-leaf option would not be correct.
 
-### Non-Spider 5-Leaf Trees
+The tree solver provides `exact`, `diff`, `spider`, `branch`,
+`tension`, `compressed`, `heuristic`, and `hybrid` methods. The
+compressed method uses caterpillar constructions, extremal pendant-ray
+extension, rooted certificate reuse, and branch fallback.
 
-A non-spider 5-leaf tree has exactly five leaves and more than one branch
-vertex. After suppressing degree-2 vertices, there are two reduced skeletons:
+The main reusable theorem is: if a rooted tree has a graceful certificate with
+the marked leaf at label 0 or at the maximum label, the certificate extends
+along any number of new pendant edges. This is a sufficient certificate rule,
+not a proof that every tree has such a rooted certificate.
 
-```text
-two-branch:    degree 3 branch -- degree 4 branch
-three-branch:  degree 3 branch -- degree 3 branch -- degree 3 branch
+The 48--50 run reduced 5,780,094 raw trees to 2,166,443 distinct rooted
+instances. A through-20 ablation reduced search nodes by about 88.6% and case
+time by about 87.7%. Observed hard cases concentrate around unbalanced
+multi-branch skeletons with short pendant paths and long terminal paths. The
+earlier modulo-3 runtime effect largely disappears after rooted reduction and
+is currently treated as a search-state effect, not an obstruction.
+
+Structural details are separated in:
+
+- [docs/theorem_summary.md](docs/theorem_summary.md)
+- [docs/reduction_theorem.md](docs/reduction_theorem.md)
+- [docs/structural_theorems.md](docs/structural_theorems.md)
+- [docs/defect_switch_search.md](docs/defect_switch_search.md)
+
+## Generic Arbitrary-Graph Search
+
+`src/graceful_graph.py` accepts any simple undirected edge set, including
+cyclic and disconnected graphs, without assuming `m = n - 1`. It is a
+family-independent baseline, not the current Graceful Tree Conjecture solver.
+
+An edge file contains one edge per line. The repository includes
+`examples/k33.edges`, a complete bipartite `K_3,3` example:
+
+```powershell
+python src/graceful_graph.py `
+  --edges examples/k33.edges `
+  --time-limit 60 `
+  --show-edges
 ```
 
-The option `--five-leaf-nonspider-sweep N` enumerates these reduced skeletons
-and subdivides every reduced edge by a positive length at most `N`.
+If isolated vertices are present, pass `--vertices N`; otherwise vertices are
+inferred from edge endpoints. For `m` edges, the generic verifier checks
+distinct labels in `0..m` and exact differences `1..m`; it does not require
+every label in that interval to be used. It rejects `n > m + 1` immediately.
 
-The option `--five-leaf-nonspider-by-edges M` instead enumerates the same
-family with total edge count at most `M`. This is usually the cleaner statement
-for reports and articles.
+Without a time, node, or candidate limit, the difference search is exhaustive.
+`--candidate-limit` is a heuristic cutoff and must not be used for an
+exhaustive claim. It will usually be slower than the tree solver because it
+does not have tree-specific branch ordering, pendant reductions, or rooted
+tension integration.
 
-## Search Methods
+Graph-family generators should import the solver instead of starting a new
+process for every case:
 
-- `exact`: direct backtracking over vertex labels.
-- `diff`: backtracking by edge differences from large to small.
-- `spider`: spider-specific difference search.
-- `branch`: branch-oriented difference search for multi-branch trees.
-- `compressed`: caterpillar construction, rooted pendant-path reduction,
-  cached base certificates, and `branch` fallback.
-- `heuristic`: randomized local search.
-- `hybrid`: tries structural methods and then generic methods.
+```python
+from graceful_graph import solve_graceful_graph, verify_graceful_labeling
 
-The `branch` method is the key method for the non-spider 5-leaf computations.
-It fixes label `0` at a branch vertex, then assigns large edge differences
-while expanding through already labeled branch structure.
-
-The `compressed` method turns one extremal-leaf base certificate into
-certificates for longer pendant paths. New logs record `strategy`,
-`reduction_base`, and `extended_edges` so the reduction chain remains
-auditable. By default, rooted certificates are also persisted in
-`results/pendant_extension_cache.sqlite3`; the in-memory cache is only a
-speed layer and is limited by `--extension-cache-size`. See
-[docs/current_results.md](docs/current_results.md) for the current reduction
-statistics and the complete `edges <= 20` ablation. Detailed proof notes are
-intentionally not part of this snapshot.
-
-The reduction itself is a sufficient certificate rule for any tree containing
-an eligible pendant path: if the shortened rooted tree has a certificate with
-the retained leaf at an extremal label, the path can be rebuilt one edge at a
-time. The five-leaf non-spider family is only the first family for which this
-repository has an exhaustive enumerator and a large systematic data set. The
-generic sources (`--edges`, `--random`, `--batch`, `--lobster-batch`, and
-`--spider-sweep`) already use the same compressed solver. The optional
-`--extension-try-all-paths` flag asks it to test every eligible pendant path;
-without that flag the historical longest-path fast path is preserved.
-
-This does not claim that every graceful tree must reduce in this way. Trees
-whose useful extension is an internal bridge subdivision, or whose available
-certificate does not put the retained leaf at an extremal label, need a
-different composition lemma or a fallback search.
-
-The exact scope of this rule and the distinction between structural candidates
-and verified certificates are documented in
-[docs/reduction_theorem.md](docs/reduction_theorem.md). Reduction coverage can
-be aggregated from one or more CSV logs without rerunning the solver:
-
-```bash
-python src/graceful_tree.py \
-  --summarize-reduction results/five_leaf_nonspider_edges48_50_compressed.csv \
-  --reduction-summary-output results/reduction_48_50.csv
+labels, stats = solve_graceful_graph(n, edges, time_limit=60)
+if labels is not None:
+    assert verify_graceful_labeling(n, edges, labels)
 ```
 
-The controlled hard-pattern comparison is implemented in
-`src/hard_pattern_experiment.py`. It fixes a two-branch tree with bridge 2,
-two pendant paths of length 1, and three sorted long paths `(a,b,c)`. The
-experiment compares ordinary branch search with 2,000-node and 20,000-node
-pendant-reduction fast paths, while recording edge count modulo 3.
-The completed comparison is summarized in
-[docs/hard_pattern_experiment_report.md](docs/hard_pattern_experiment_report.md).
-The six remaining boundary cases have a separate targeted experiment in
-`src/hard_boundary_experiment.py`.
-That replay solved all six with a 100,000-node rooted-base budget; all-paths
-search did not improve on the single longest-path choice.
+More details are in [docs/generic_graph_solver.md](docs/generic_graph_solver.md).
 
-The main solver now has an opt-in adaptive budget for this observed pattern:
-`--extension-adaptive-budget` raises the rooted-base budget to
-`--extension-adaptive-nodes` (100,000 by default) only when the tree matches
-the structural signature: five leaves, two or three branch vertices, at least
-two terminal paths of length at most 3, and three remaining terminal paths of
-length at least 9. The default compressed behavior is unchanged.
+## Certificates, Documentation, and Data
 
-Recoverable certificates from older compressed CSV logs can be imported with
-`--import-extension-cache`; this lets later runs reuse certificates after a
-restart. The importer validates the recovered rooted certificate before
-inserting it, so it can also extract compatible certificates from older logs
-that do not record a search strategy.
+Tree and antimagic batch tools write case names, graph data, certificates, and
+search statistics to CSV. `src/verify_certificates.py` checks solved rows
+without invoking the search algorithm. The generic solver verifies a single
+certificate before printing it.
 
-The latest compressed 48-50 run enumerated 5,780,094 trees but recorded only
-2,166,443 distinct rooted reduction bases. The run completed with no timeout,
-and took about 4 hours 56 minutes. See
-[docs/current_results.md](docs/current_results.md) for the strategy breakdown
-and the comparison with the uncompressed branch search.
+Key documents:
 
-The subsequent 51-55 run enumerated 15,800,487 trees. Its initial pass left
-20 timeout rows; a targeted adaptive replay solved all 20, and all 20 replay
-certificates passed the independent verifier. The adaptive rule raises the
-rooted-base budget only for a recurring five-leaf hard signature, leaving the
-historical default unchanged for other trees.
+- [TODO.md](TODO.md): tasks and stopping rules;
+- [docs/current_results.md](docs/current_results.md): numerical summary;
+- [docs/technical_report.md](docs/technical_report.md): technical report;
+- [docs/runbook.md](docs/runbook.md): replay and recovery commands;
+- [docs/research_roadmap.md](docs/research_roadmap.md): execution plan;
+- [docs/paper_outline.md](docs/paper_outline.md): article outline.
 
-The next 56-57 run enumerated 9,302,112 trees. Its initial pass solved
-9,302,100 and left 12 timeout rows. A targeted replay using a 100,000-node
-rooted-base budget and all eligible pendant paths solved all 12; the independent
-verifier reported `checked_solved=12, bad=0`. The final covered total through
-57 edges is 41,199,705 solved certificates, with 0 unresolved after replay.
-The first-pass and replay logs remain separate so the timeout reduction is
-auditable.
+Full CSV logs and the SQLite cache remain local because they can reach multiple
+gigabytes. The GitHub version contains source code, tests, reproducible
+commands, small examples, and compact summaries. Commands use paths relative to
+the repository root; no machine-specific absolute paths are required.
 
-For antimagic labeling, the current framework uses deterministic branch-first
-edge-label search and, only after a primary timeout, randomized fallback trials.
-This makes timeouts useful diagnostic objects: when a case is hard, it is
-replayed, structurally classified, and used to tune the next search order.
+## Tests and License
 
-## Certificates
-
-The search tools write CSV rows containing:
-
-```text
-case name
-vertex count
-edge list
-labeling certificate
-search statistics
+```powershell
+python -m unittest discover -s tests -v
 ```
 
-For graceful rows, the certificate is a list of vertex labels. For antimagic
-rows, the certificate is a list of edge labels in the same order as the edge
-list. `src/verify_certificates.py` independently checks solved rows and ignores
-unsolved rows, so partial logs from interrupted long runs can still be audited.
+The test suite covers tree compression, replay reconstruction, hard-pattern
+experiments, rooted certificates, free-tree prototypes, and the generic graph
+solver.
 
-## Report
-
-See [docs/technical_report.md](docs/technical_report.md) for the current
-technical summary, known-result context, and experiment status.
-The concise public result summary is in
-[docs/current_results.md](docs/current_results.md).
-Detailed constructive proof notes are being kept for a later revision.
-
-## Data Policy
-
-The GitHub version contains source code, reproducible commands, tests, and
-compact result summaries. Generated search data is kept locally:
-
-- Full CSV logs under `results/` are ignored because they can reach multiple
-  gigabytes.
-- The persistent certificate database under `results/` is a local accelerator
-  and is not part of the source distribution.
-- Temporary hardest/failed edge lists are also excluded.
-- Small hand-picked examples may be placed under `examples/`.
-
-The current graceful computation through 50 edges contains
-`16,097,106 / 16,097,106` solved cases. The separate antimagic computation
-through 50 edges also contains `16,097,106` valid solved rows. The numerical
-summaries in `docs/current_results.md` are the public record for the larger
-local runs.
+See [LICENSE](LICENSE).
