@@ -5,6 +5,15 @@ venv/
 env/
 
 results/
+
+# Local mathematical research notes; publish only after the final audit.
+/docs/compression_lemmas.md
+/docs/method_registry.md
+/docs/reduction_theorem.md
+/docs/structural_findings.md
+/docs/structural_theorems.md
+/docs/tension_first_experiment.md
+/docs/theorem_summary.md
 outputs/
 *.log
 

@@ -191,11 +191,6 @@ The tree solver provides `exact`, `diff`, `spider`, `branch`,
 compressed method uses caterpillar constructions, extremal pendant-ray
 extension, rooted certificate reuse, and branch fallback.
 
-The main reusable theorem is: if a rooted tree has a graceful certificate with
-the marked leaf at label 0 or at the maximum label, the certificate extends
-along any number of new pendant edges. This is a sufficient certificate rule,
-not a proof that every tree has such a rooted certificate.
-
 The 48--50 run reduced 5,780,094 raw trees to 2,166,443 distinct rooted
 instances. A through-20 ablation reduced search nodes by about 88.6% and case
 time by about 87.7%. Observed hard cases concentrate around unbalanced
@@ -203,12 +198,9 @@ multi-branch skeletons with short pendant paths and long terminal paths. The
 earlier modulo-3 runtime effect largely disappears after rooted reduction and
 is currently treated as a search-state effect, not an obstruction.
 
-Structural details are separated in:
-
-- [docs/theorem_summary.md](docs/theorem_summary.md)
-- [docs/reduction_theorem.md](docs/reduction_theorem.md)
-- [docs/structural_theorems.md](docs/structural_theorems.md)
-- [docs/defect_switch_search.md](docs/defect_switch_search.md)
+Detailed structural theorem drafts and proof-status notes are intentionally
+kept in the local research workspace while the computational campaign is
+ongoing. They are not part of the public repository yet.
 
 ## Generic Arbitrary-Graph Search
 
