@@ -49,20 +49,23 @@ edge range       cases        final solved     final unresolved
 60               6,738,836    6,738,836        0
 61                 107,619      107,619        0
 62               8,252,989    8,252,989        0
+63               9,110,398    9,110,398        0
 ```
 
-Cumulative status through 62 edges:
+Cumulative status through 63 edges:
 
 ```text
-67,836,249 solved certificates
+76,946,647 solved certificates through edge 63
 0 unresolved after replay
 ```
 
 The final five 62-edge cases were recovered by three independent replay
 strategies: 12 by a 600-second compressed replay, 2 by a longer branch replay,
 and 3 by a difference-search replay. The independent verifier reported
-`bad=0` on all three replay logs. Edge 63 is the next unstarted layer and
-contains 9,110,398 cases.
+`bad=0` on all three replay logs. The edge-63 layer was subsequently closed by
+alternative certificate searches: all 93 initial hard rows were solved, and
+the new certificates passed an independent verifier. Edge 64 is now the next
+unstarted exact layer.
 
 Other recorded experiments:
 
@@ -99,7 +102,7 @@ define and enumerate a family
 
 The current order is:
 
-1. Finish the five-leaf non-spider line through 65 edges.
+1. Continue the five-leaf non-spider line from the closed edge-63 layer toward 65 edges.
 2. Implement a canonical reduced-skeleton generator for 6--20 leaves.
 3. Only then select a specific non-tree graph-family question for the generic
    graph solver, rather than enumerating arbitrary regular graphs.

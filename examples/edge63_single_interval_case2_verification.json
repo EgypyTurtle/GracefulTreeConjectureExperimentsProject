@@ -1,0 +1,9 @@
+{
+  "case": "fiveleaf3e-63-3-5-4-20-1-14-16",
+  "labels_count": 64,
+  "labels_distinct": true,
+  "label_range": [0, 63],
+  "global_graceful_verifier": true,
+  "all_path_intervals_exact": true,
+  "certificate_valid": true
+}
