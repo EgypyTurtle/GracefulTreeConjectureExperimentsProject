@@ -1,0 +1,26 @@
+{
+  "total_edge64_cases": 10040677,
+  "pilot_size": 200000,
+  "tier0_hard_rate": 0.05196,
+  "tier1_residual_rate": 0.04629,
+  "tier2_residual_rate": 0.023465,
+  "bounded_tier2_residual_count": 4693,
+  "bounded_tier2_residual_rate": 0.023465,
+  "tier_budgets_seconds": {
+    "0": 0.25,
+    "1": 0.25,
+    "2": 0.25
+  },
+  "pilot_budget_is_bounded": true,
+  "residual_semantics": "cases unresolved after the explicit 0.25-second Tier2 budget; not an exhaustive mathematical residual",
+  "estimated_initial_hard_count": 521714,
+  "estimated_true_residual_count": 235604,
+  "median_nodes": 474,
+  "p99_nodes": 6788,
+  "estimated_total_nodes": 11983819599.812849,
+  "edge63_reference_total_nodes": 12085967534,
+  "estimated_total_work_ratio_vs_edge63": 0.9915482203721141,
+  "recommended_next_mode": "STRUCTURAL_STUDY_FIRST",
+  "planning_classification": "EDGE64_NEW_DIFFICULTY",
+  "planning_note": "Pilot uses explicit bounded per-tier budgets; this is a planning estimate, not a proof or confidence interval."
+}

@@ -1,0 +1,8 @@
+{
+  "status": "PASS",
+  "pilot_cases": 200000,
+  "certificate_count": 195307,
+  "certificates_verified": 195307,
+  "errors": [],
+  "note": "All solved pilot certificates are independently rechecked with the existing verifier."
+}

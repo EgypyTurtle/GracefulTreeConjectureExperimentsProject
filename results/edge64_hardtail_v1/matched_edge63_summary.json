@@ -1,0 +1,28 @@
+{
+  "control_cases": 50000,
+  "tiers": [
+    {
+      "tier": 0,
+      "method": "compressed",
+      "input": 50000,
+      "solved": 48586,
+      "survivors": 1414
+    },
+    {
+      "tier": 1,
+      "method": "diff",
+      "input": 1414,
+      "solved": 176,
+      "survivors": 1238
+    },
+    {
+      "tier": 2,
+      "method": "tension",
+      "input": 1238,
+      "solved": 688,
+      "survivors": 550
+    }
+  ],
+  "final_survivors": 550,
+  "same_configuration": "0.25 seconds per tier; compressed -> diff -> tension"
+}

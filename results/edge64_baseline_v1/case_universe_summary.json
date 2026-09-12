@@ -1,0 +1,18 @@
+{
+  "edge_count": 64,
+  "total_cases": 10040677,
+  "skeleton_counts": {
+    "fiveleaf2e": 686301,
+    "fiveleaf3e": 9354376
+  },
+  "strata_count": 54,
+  "hard_like_pattern_cases": 1235397,
+  "edge63_reference_total": 9110398,
+  "growth_vs_edge63": 0.10211178479798577,
+  "expected_planning_range": [
+    9800000,
+    10200000
+  ],
+  "within_expected_planning_range": true,
+  "canonicalization": "same edge-indexed fiveleaf2e/fiveleaf3e naming and end-order reduction as edge63"
+}

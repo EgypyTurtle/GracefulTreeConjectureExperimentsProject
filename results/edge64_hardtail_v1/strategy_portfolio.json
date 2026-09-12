@@ -1,0 +1,80 @@
+{
+  "corpus_size": 146,
+  "methods": [
+    {
+      "method": "compressed",
+      "solved": 0,
+      "rate": 0.0
+    },
+    {
+      "method": "hybrid",
+      "solved": 65,
+      "rate": 0.4452054794520548
+    },
+    {
+      "method": "branch",
+      "solved": 76,
+      "rate": 0.5205479452054794
+    },
+    {
+      "method": "diff",
+      "solved": 15,
+      "rate": 0.10273972602739725
+    },
+    {
+      "method": "tension",
+      "solved": 58,
+      "rate": 0.3972602739726027
+    }
+  ],
+  "greedy_portfolio": [
+    {
+      "method": "branch",
+      "newly_solved": 76,
+      "cumulative_solved": 76
+    },
+    {
+      "method": "hybrid",
+      "newly_solved": 26,
+      "cumulative_solved": 102
+    },
+    {
+      "method": "tension",
+      "newly_solved": 14,
+      "cumulative_solved": 116
+    },
+    {
+      "method": "diff",
+      "newly_solved": 4,
+      "cumulative_solved": 120
+    }
+  ],
+  "portfolio_coverage": [
+    {
+      "portfolio_size": 1,
+      "methods": ["branch"],
+      "solved": 76,
+      "coverage": 0.5205479452054794
+    },
+    {
+      "portfolio_size": 2,
+      "methods": ["branch", "hybrid"],
+      "solved": 102,
+      "coverage": 0.6986301369863014
+    },
+    {
+      "portfolio_size": 3,
+      "methods": ["branch", "hybrid", "tension"],
+      "solved": 116,
+      "coverage": 0.7945205479452054
+    },
+    {
+      "portfolio_size": 4,
+      "methods": ["branch", "hybrid", "tension", "diff"],
+      "solved": 120,
+      "coverage": 0.821917808219178
+    }
+  ],
+  "all_strategy_coverage": 0.821917808219178,
+  "uncovered_after_all": 26
+}

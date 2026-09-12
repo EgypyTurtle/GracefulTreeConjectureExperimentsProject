@@ -1,0 +1,52 @@
+{
+  "pilot_size": 200000,
+  "tier0": {
+    "input": 200000,
+    "solved": 189608,
+    "unresolved": 10392,
+    "errors": 0,
+    "median_runtime": 0.016877,
+    "p90_runtime": 0.109749,
+    "p99_runtime": 0.252142,
+    "median_nodes": 504,
+    "p99_nodes": 6835,
+    "budget_seconds": 0.25
+  },
+  "tier1": {
+    "input": 10392,
+    "solved": 1134,
+    "unresolved": 9258,
+    "errors": 0,
+    "median_runtime": 0.259491,
+    "p90_runtime": 0.265133,
+    "p99_runtime": 0.268914,
+    "median_nodes": 110,
+    "p99_nodes": 601,
+    "budget_seconds": 0.25
+  },
+  "tier2": {
+    "input": 9258,
+    "solved": 4565,
+    "unresolved": 4693,
+    "errors": 0,
+    "median_runtime": 0.39426,
+    "p90_runtime": 0.564021,
+    "p99_runtime": 0.648063,
+    "median_nodes": 2454,
+    "p99_nodes": 6009,
+    "budget_seconds": 0.25
+  },
+  "certificates": 195307,
+  "errors": 0,
+  "elapsed_seconds": 1779.6205503940582,
+  "edge64_universe": {
+    "total_cases": 10040677,
+    "fiveleaf2e": 686301,
+    "fiveleaf3e": 9354376
+  },
+  "edge63_reference": {
+    "total_cases": 9110398,
+    "recorded_total_nodes": 12085967534,
+    "comparison_note": "The pilot cascade uses explicit bounded budgets; compare as planning telemetry only."
+  }
+}

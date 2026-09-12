@@ -1,0 +1,125 @@
+{
+  "type": "exploratory_decision_tree",
+  "max_depth": 4,
+  "target": "ROBUST_HARD after 1s portfolio",
+  "tree": {
+    "type": "split",
+    "feature": "terminal_min_le2",
+    "gini_gain": 1.7366624389017482e-05,
+    "count": 4693,
+    "robust_hard": 24,
+    "false": {
+      "type": "split",
+      "feature": "bridge_eq3",
+      "gini_gain": 3.465056857427859e-06,
+      "count": 3004,
+      "robust_hard": 22,
+      "false": {
+        "type": "split",
+        "feature": "fiveleaf3e",
+        "gini_gain": 1.1407098807775934e-06,
+        "count": 2910,
+        "robust_hard": 22,
+        "false": {
+          "type": "split",
+          "feature": "balanced",
+          "gini_gain": 2.1720699826938833e-05,
+          "count": 1180,
+          "robust_hard": 10,
+          "false": {
+            "count": 1025,
+            "robust_hard": 10,
+            "hard_rate": 0.00975609756097561,
+            "depth": 4,
+            "type": "leaf"
+          },
+          "true": {
+            "count": 155,
+            "robust_hard": 0,
+            "hard_rate": 0.0,
+            "depth": 4,
+            "type": "leaf"
+          }
+        },
+        "true": {
+          "type": "split",
+          "feature": "balanced",
+          "gini_gain": 1.9686001577217185e-05,
+          "count": 1730,
+          "robust_hard": 12,
+          "false": {
+            "count": 1444,
+            "robust_hard": 8,
+            "hard_rate": 0.00554016620498615,
+            "depth": 4,
+            "type": "leaf"
+          },
+          "true": {
+            "count": 286,
+            "robust_hard": 4,
+            "hard_rate": 0.013986013986013986,
+            "depth": 4,
+            "type": "leaf"
+          }
+        }
+      },
+      "true": {
+        "count": 94,
+        "robust_hard": 0,
+        "hard_rate": 0.0,
+        "depth": 2,
+        "type": "leaf"
+      }
+    },
+    "true": {
+      "type": "split",
+      "feature": "fiveleaf3e",
+      "gini_gain": 4.596488755822647e-06,
+      "count": 1689,
+      "robust_hard": 2,
+      "false": {
+        "type": "split",
+        "feature": "bridge_le3",
+        "gini_gain": 8.749292986424788e-06,
+        "count": 640,
+        "robust_hard": 2,
+        "false": {
+          "type": "split",
+          "feature": "unbalanced_ge9",
+          "gini_gain": 1.0542777609815618e-05,
+          "count": 442,
+          "robust_hard": 2,
+          "false": {
+            "count": 321,
+            "robust_hard": 1,
+            "hard_rate": 0.003115264797507788,
+            "depth": 4,
+            "type": "leaf"
+          },
+          "true": {
+            "count": 121,
+            "robust_hard": 1,
+            "hard_rate": 0.008264462809917356,
+            "depth": 4,
+            "type": "leaf"
+          }
+        },
+        "true": {
+          "count": 198,
+          "robust_hard": 0,
+          "hard_rate": 0.0,
+          "depth": 3,
+          "type": "leaf"
+        }
+      },
+      "true": {
+        "count": 1049,
+        "robust_hard": 0,
+        "hard_rate": 0.0,
+        "depth": 2,
+        "type": "leaf"
+      }
+    }
+  },
+  "note": "Exploratory partition only; no theorem or pruning rule is inferred."
+}

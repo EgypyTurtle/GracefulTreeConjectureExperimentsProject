@@ -1,0 +1,86 @@
+{
+  "pilot_size": 200000,
+  "residual_strata_top": [
+    {
+      "stratum": "two_branch|short_le3|terminal_min_ge3|balanced_le2|tier2_residual",
+      "count": 275
+    },
+    {
+      "stratum": "two_branch|short_le3|terminal_min_ge3|moderate_3_8|tier2_residual",
+      "count": 268
+    },
+    {
+      "stratum": "three_branch|both_short_le3|middle_odd|terminal_min_ge3|balanced_le2|tier2_residual",
+      "count": 149
+    },
+    {
+      "stratum": "three_branch|both_short_le3|middle_even|terminal_min_ge3|balanced_le2|tier2_residual",
+      "count": 146
+    },
+    {
+      "stratum": "two_branch|short_le3|terminal_min_ge3|unbalanced_ge9|tier2_residual",
+      "count": 143
+    },
+    {
+      "stratum": "two_branch|medium_4_8|terminal_min_ge3|moderate_3_8|tier2_residual",
+      "count": 142
+    },
+    {
+      "stratum": "three_branch|both_short_le3|middle_even|terminal_min_ge3|moderate_3_8|tier2_residual",
+      "count": 135
+    },
+    {
+      "stratum": "two_branch|medium_4_8|terminal_min_ge3|balanced_le2|tier2_residual",
+      "count": 134
+    },
+    {
+      "stratum": "three_branch|both_short_le3|middle_odd|terminal_min_ge3|moderate_3_8|tier2_residual",
+      "count": 129
+    },
+    {
+      "stratum": "three_branch|both_short_le3|middle_odd|terminal_min_ge3|unbalanced_ge9|tier2_residual",
+      "count": 127
+    },
+    {
+      "stratum": "three_branch|one_short_le3|middle_even|terminal_min_ge3|balanced_le2|tier2_residual",
+      "count": 116
+    },
+    {
+      "stratum": "two_branch|medium_4_8|terminal_min_ge3|unbalanced_ge9|tier2_residual",
+      "count": 116
+    },
+    {
+      "stratum": "three_branch|both_short_le3|middle_even|terminal_min_ge3|unbalanced_ge9|tier2_residual",
+      "count": 99
+    },
+    {
+      "stratum": "three_branch|one_short_le3|middle_odd|terminal_min_ge3|balanced_le2|tier2_residual",
+      "count": 98
+    },
+    {
+      "stratum": "two_branch|medium_4_8|terminal_min_le2|balanced_le2|tier2_residual",
+      "count": 96
+    },
+    {
+      "stratum": "three_branch|both_ge4|middle_even|terminal_min_ge3|balanced_le2|tier2_residual",
+      "count": 92
+    },
+    {
+      "stratum": "three_branch|one_short_le3|middle_even|terminal_min_ge3|moderate_3_8|tier2_residual",
+      "count": 91
+    },
+    {
+      "stratum": "three_branch|one_short_le3|middle_odd|terminal_min_ge3|moderate_3_8|tier2_residual",
+      "count": 90
+    },
+    {
+      "stratum": "two_branch|medium_4_8|terminal_min_le2|moderate_3_8|tier2_residual",
+      "count": 85
+    },
+    {
+      "stratum": "three_branch|both_ge4|middle_odd|terminal_min_ge3|balanced_le2|tier2_residual",
+      "count": 83
+    }
+  ],
+  "edge63_hard_pattern_diagnostic": "bridge<=3, odd central tail where applicable, terminal min<=2; diagnostic only"
+}
