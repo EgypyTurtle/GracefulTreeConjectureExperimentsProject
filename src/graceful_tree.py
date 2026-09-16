@@ -208,6 +208,49 @@ class SearchStats:
     extended_edges: int = 0
 
 
+def _trace_counter(trace: dict | None, bucket: str, key: str | int, amount: int = 1) -> None:
+    if trace is None:
+        return
+    counters = trace.setdefault(bucket, {})
+    key = str(key)
+    counters[key] = int(counters.get(key, 0)) + amount
+
+
+def _trace_node(trace: dict | None, depth: int) -> None:
+    if trace is None:
+        return
+    _trace_counter(trace, "nodes_by_depth", depth)
+    trace["max_recursion_depth"] = max(int(trace.get("max_recursion_depth", 0)), depth)
+
+
+def _trace_branching(trace: dict | None, depth: int, count: int) -> None:
+    if trace is None:
+        return
+    data = trace.setdefault("branching_by_depth", {}).setdefault(str(depth), {"calls": 0, "sum": 0, "max": 0})
+    data["calls"] += 1
+    data["sum"] += count
+    data["max"] = max(data["max"], count)
+
+
+def _trace_contradiction(trace: dict | None, depth: int, reason: str) -> None:
+    if trace is None:
+        return
+    _trace_counter(trace, "contradictions_by_depth", depth)
+    _trace_counter(trace, "contradiction_reasons", reason)
+    if "first_contradiction_depth" not in trace:
+        trace["first_contradiction_depth"] = depth
+
+
+def _trace_branch_choice(trace: dict | None, depth: int, choice: dict) -> None:
+    if trace is None:
+        return
+    choices = trace.setdefault("branch_choices", [])
+    if len(choices) < 64:
+        item = dict(choice)
+        item["depth"] = depth
+        choices.append(item)
+
+
 def read_edges(path: str) -> list[Edge]:
     edges: list[Edge] = []
     with open(path, "r", encoding="utf-8") as f:
@@ -657,6 +700,7 @@ def solve_graceful_by_differences(
     time_limit: float | None = None,
     seed: int | None = None,
     max_candidates_per_diff: int | None = None,
+    trace: dict | None = None,
 ) -> tuple[list[int] | None, SearchStats]:
     n = len(adj)
     m = n - 1
@@ -718,6 +762,7 @@ def solve_graceful_by_differences(
                 if timed_out():
                     break
                 if not (0 <= low <= m - d):
+                    _trace_counter(trace, "rejects", "label_range")
                     continue
                 for high_at_u in (False, True):
                     ok, changes = can_place(d, edge_index, low, high_at_u)
@@ -729,6 +774,7 @@ def solve_graceful_by_differences(
             rng.shuffle(moves)
         moves.sort(key=lambda item: (-item[4], -item[5], item[1], item[0]))
         trimmed = [(e, low, high, changes) for e, low, high, changes, _, _ in moves]
+        _trace_branching(trace, m - d, len(trimmed))
         if max_candidates_per_diff is not None and len(trimmed) > max_candidates_per_diff:
             return trimmed[:max_candidates_per_diff]
         return trimmed
@@ -740,16 +786,22 @@ def solve_graceful_by_differences(
         if timed_out():
             return False
         stats.nodes += 1
+        _trace_node(trace, m - d)
         if d == 0:
             return all(label != -1 for label in labels)
         moves = candidate_moves(d)
+        if not moves:
+            _trace_contradiction(trace, m - d, "no_candidate_moves")
         for edge_index, _low, _high_at_u, changes in moves:
+            _trace_branch_choice(trace, m - d, {"edge_index": edge_index, "changes": changes})
             used_edge[edge_index] = True
             for vertex, label in changes:
                 labels[vertex] = label
                 used_label[label] = True
             if feasible_remaining(d - 1) and backtrack(d - 1):
                 return True
+            if d > 1:
+                _trace_contradiction(trace, m - d, "next_difference_infeasible")
             for vertex, label in reversed(changes):
                 labels[vertex] = -1
                 used_label[label] = False
@@ -769,6 +821,7 @@ def solve_graceful_branch_differences(
     max_candidates_per_diff: int | None = None,
     fixed_zero_vertex: int | None = None,
     max_nodes: int | None = None,
+    trace: dict | None = None,
 ) -> tuple[list[int] | None, SearchStats]:
     n = len(adj)
     m = n - 1
@@ -819,6 +872,7 @@ def solve_graceful_branch_differences(
             u, v = edges[edge_index]
             high_label = low_label + d
             if high_label > m:
+                _trace_counter(trace, "rejects", "label_range")
                 return False, []
             assignments = [(u, high_label), (v, low_label)] if high_at_u else [(u, low_label), (v, high_label)]
             changes = []
@@ -826,9 +880,11 @@ def solve_graceful_branch_differences(
                 current = labels[vertex]
                 if current != -1:
                     if current != label:
+                        _trace_counter(trace, "rejects", "label_collision")
                         return False, []
                     continue
                 if used_label[label]:
+                    _trace_counter(trace, "rejects", "label_collision")
                     return False, []
                 changes.append((vertex, label))
             return True, changes
@@ -849,6 +905,7 @@ def solve_graceful_branch_differences(
                     continue
                 for low in lows:
                     if not (0 <= low <= m - d):
+                        _trace_counter(trace, "rejects", "label_range")
                         continue
                     for high_at_u in (False, True):
                         ok, changes = can_place(d, edge_index, low, high_at_u)
@@ -863,6 +920,7 @@ def solve_graceful_branch_differences(
                 rng.shuffle(moves)
             moves.sort(key=lambda item: (-item[2], -item[3], -item[4], -item[5], item[0]))
             trimmed = [(edge_index, changes) for edge_index, changes, *_rest in moves]
+            _trace_branching(trace, m - d, len(trimmed))
             if max_candidates_per_diff is not None and len(trimmed) > max_candidates_per_diff:
                 return trimmed[:max_candidates_per_diff]
             return trimmed
@@ -874,15 +932,22 @@ def solve_graceful_branch_differences(
             if timed_out():
                 return False
             stats.nodes += 1
+            _trace_node(trace, m - d)
             if d == 0:
                 return all(label != -1 for label in labels)
-            for edge_index, changes in candidate_moves(d):
+            moves = candidate_moves(d)
+            if not moves:
+                _trace_contradiction(trace, m - d, "no_candidate_moves")
+            for edge_index, changes in moves:
+                _trace_branch_choice(trace, m - d, {"edge_index": edge_index, "changes": changes})
                 used_edge[edge_index] = True
                 for vertex, label in changes:
                     labels[vertex] = label
                     used_label[label] = True
                 if feasible_remaining(d - 1) and backtrack(d - 1):
                     return True
+                if d > 1:
+                    _trace_contradiction(trace, m - d, "next_difference_infeasible")
                 for vertex, label in reversed(changes):
                     labels[vertex] = -1
                     used_label[label] = False
@@ -901,6 +966,8 @@ def solve_graceful_tension(
     seed: int | None = None,
     max_candidates_per_diff: int | None = None,
     max_nodes: int | None = None,
+    trace: dict | None = None,
+    move_order: str = "default",
 ) -> tuple[list[int] | None, SearchStats]:
     """Search in the exact tension representation of a graceful tree.
 
@@ -980,22 +1047,30 @@ def solve_graceful_tension(
             moves: list[tuple[int, int, int]] = []
             for difference in range(m, 0, -1):
                 if used_diff[difference]:
+                    _trace_counter(trace, "rejects", "difference_collision")
                     continue
                 for sign in (1, -1):
                     child_label = parent_label + sign * difference
-                    if not 0 <= child_label <= m or used_label[child_label]:
+                    if not 0 <= child_label <= m:
+                        _trace_counter(trace, "rejects", "label_range")
+                        continue
+                    if used_label[child_label]:
+                        _trace_counter(trace, "rejects", "label_collision")
                         continue
                     moves.append((difference, sign, child_label))
             if seed is not None:
                 rng.shuffle(moves)
-            moves.sort(
-                key=lambda move: (
-                    -move[0],
-                    -max(move[2], m - move[2]),
-                    move[2],
-                    move[1],
+            if move_order == "label_first":
+                moves.sort(key=lambda move: (move[2], -move[0], move[1]))
+            else:
+                moves.sort(
+                    key=lambda move: (
+                        -move[0],
+                        -max(move[2], m - move[2]),
+                        move[2],
+                        move[1],
+                    )
                 )
-            )
             if max_candidates_per_diff is not None:
                 return moves[:max_candidates_per_diff]
             return moves
@@ -1036,16 +1111,23 @@ def solve_graceful_tension(
 
             vertex = choose_frontier()
             if vertex is None:
+                _trace_contradiction(trace, assigned_edges, "no_frontier")
                 stats.backtracks += 1
                 return False
 
             moves = candidates(vertex)
+            _trace_node(trace, assigned_edges)
+            _trace_branching(trace, assigned_edges, len(moves))
+            if not moves:
+                _trace_contradiction(trace, assigned_edges, "no_candidate_moves")
             for difference, sign, child_label in moves:
+                _trace_branch_choice(trace, assigned_edges, {"vertex": vertex, "difference": difference, "sign": sign, "child_label": child_label})
                 labels[vertex] = child_label
                 used_label[child_label] = True
                 used_diff[difference] = True
                 if frontier_feasible() and backtrack(assigned_edges + 1):
                     return True
+                _trace_contradiction(trace, assigned_edges, "frontier_infeasible")
                 used_diff[difference] = False
                 used_label[child_label] = False
                 labels[vertex] = -1
@@ -1175,6 +1257,7 @@ def solve_graceful_pendant_extension(
     cache_size: int = 100_000,
     cache_db: str | None = None,
     try_all_paths: bool = False,
+    trace: dict | None = None,
 ) -> tuple[list[int] | None, SearchStats]:
     """Reduce pendant paths to one edge, then rebuild by extremal extension."""
     started_at = time.time()
@@ -1221,6 +1304,7 @@ def solve_graceful_pendant_extension(
                 time_limit=remaining_time,
                 fixed_zero_vertex=reduced_leaf,
                 max_nodes=remaining_nodes,
+                trace=trace,
             )
             total_nodes += path_stats.nodes
             total_backtracks += path_stats.backtracks
@@ -1507,6 +1591,7 @@ def solve_graceful_spider(
 
 
 def solve_tree(adj: list[list[int]], args: argparse.Namespace, seed: int | None = None) -> tuple[list[int] | None, SearchStats]:
+    trace = getattr(args, "trace", None)
     if not args.no_constructive_fastpath:
         labels, stats = solve_graceful_caterpillar(adj)
         if labels is not None:
@@ -1529,6 +1614,7 @@ def solve_tree(adj: list[list[int]], args: argparse.Namespace, seed: int | None 
             cache_size=args.extension_cache_size,
             cache_db=args.extension_cache_db,
             try_all_paths=args.extension_try_all_paths,
+            trace=trace,
         )
         if labels is not None:
             if adaptive_budget:
@@ -1541,6 +1627,7 @@ def solve_tree(adj: list[list[int]], args: argparse.Namespace, seed: int | None 
             time_limit=remaining,
             seed=seed,
             max_candidates_per_diff=args.diff_candidates,
+            trace=trace,
         )
         stats.nodes += prefix_stats.nodes
         stats.backtracks += prefix_stats.backtracks
@@ -1565,6 +1652,7 @@ def solve_tree(adj: list[list[int]], args: argparse.Namespace, seed: int | None 
             time_limit=args.time_limit,
             seed=seed,
             max_candidates_per_diff=args.diff_candidates,
+            trace=trace,
         )
     if args.method == "branch":
         return solve_graceful_branch_differences(
@@ -1572,6 +1660,7 @@ def solve_tree(adj: list[list[int]], args: argparse.Namespace, seed: int | None 
             time_limit=args.time_limit,
             seed=seed,
             max_candidates_per_diff=args.diff_candidates,
+            trace=trace,
         )
     if args.method == "tension":
         return solve_graceful_tension(
@@ -1579,6 +1668,7 @@ def solve_tree(adj: list[list[int]], args: argparse.Namespace, seed: int | None 
             time_limit=args.time_limit,
             seed=seed,
             max_candidates_per_diff=args.diff_candidates,
+            trace=trace,
         )
     if args.method == "heuristic":
         return solve_graceful_heuristic(
@@ -1608,6 +1698,7 @@ def solve_tree(adj: list[list[int]], args: argparse.Namespace, seed: int | None 
         time_limit=args.time_limit,
         seed=seed,
         max_candidates_per_diff=args.diff_candidates,
+        trace=trace,
     )
     if labels is not None:
         return labels, stats
@@ -1619,6 +1710,7 @@ def solve_tree(adj: list[list[int]], args: argparse.Namespace, seed: int | None 
         time_limit=args.time_limit,
         seed=seed,
         max_candidates_per_diff=args.diff_candidates,
+        trace=trace,
     )
     if labels is not None:
         return labels, stats

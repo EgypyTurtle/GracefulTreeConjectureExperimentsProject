@@ -1,6 +1,6 @@
 # Edge 63 Public Status
 
-Date: 2026-09-05
+Date: 2026-09-06
 
 ## Exhaustive family result
 
@@ -29,8 +29,11 @@ fiveleaf3e-63-3-21-2-20-9-4-4   UNSAT_EXHAUSTIVE
 fiveleaf3e-63-3-5-4-20-1-14-16  SAT_VERIFIED
 ```
 
-The first result has exact minimum relative-offset span 66, so its
-single-interval language misses the label window by 3. This does not show that
+The first result was re-audited with an explicit private-vertex distinctness
+check in the terminal-pair cache. The corrected finite run has 36 valid
+final-compatible candidates, with span distribution `67:4, 68:16, 69:16`;
+its exact minimum relative-offset span is therefore 67, so the corrected
+single-interval language misses the label window by 4. This does not show that
 the tree is non-graceful; the unrestricted tree already has a graceful
 certificate. The second case has a verified single-interval certificate with
 span 63. Together they indicate a parameter-dependent span frontier rather
