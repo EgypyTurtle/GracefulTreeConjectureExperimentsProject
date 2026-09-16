@@ -129,6 +129,76 @@ final_status.json           not written (run never completed)
 The previous attempt's `pending/after_compressed_0.5s.csv.tmp` is rebuilt from
 the batch files on the next resume, so its loss is recoverable by construction.
 
+## Storage finding: one malformed cache
+
+A corruption sweep of all 102 SQLite databases under `results/` found exactly
+one bad file:
+
+```text
+production_extension_compressed_32888.sqlite3   191 MB   MALFORMED
+```
+
+`PRAGMA quick_check` fails on the **main database**, not merely on its WAL, so
+the file was already damaged before the process was stopped. The file is a
+per-PID, disposable certificate cache — a cache miss only costs recomputation,
+and no future worker reuses it — so it is not a correctness threat and has been
+removed. Every other database reports `ok`.
+
+The volume is a plausible contributing factor and is worth treating as the
+leading hypothesis for the original wedge:
+
+```text
+D:\   652.9 GB total, 70.0 GB free (10.7%)  [after removing the bad cache]
+results/  82.76 GB
+```
+
+A `disk full` error during a WAL append or an atomic batch write would abort the
+run without necessarily printing anything, which matches the observed profile
+(no writes for 39 hours, no `final_status.json`, no stdout). The exact trigger
+was not reproduced, so this remains a hypothesis rather than an established
+cause.
+
+## Disk budget for the remaining run
+
+Measured from the first stage at 3,800,064 processed cases:
+
+```text
+component                                  size      per case
+batch result csv  (7,471 files)          1.164 GB    0.116 kB
+verification checkpoints (37 files)      0.766 GB    0.079 kB per solved
+                                          (99,204 certs each, ~2% coverage)
+sqlite certificate caches (per worker)   0.97 GB     0.106 kB
+```
+
+Only the first two scale with stage input. The sqlite caches are per-worker
+files that a sequential resume does not create at all, so a stage costs roughly
+`input_cases * 0.20 kB`; scaling the first stage to the full universe gives
+about 2.0 GB.
+
+```text
+stage                  input cases    projected
+compressed_0.5s         10,040,677       2.0 GB
+compressed_1s            6,629,000       1.3 GB
+compressed_2s            5,070,000       1.0 GB
+compressed_5s            4,459,000       0.9 GB
+diff_1s                  3,790,000       0.8 GB
+tension_1s               2,530,000       0.5 GB
+hybrid_1s                2,000,000       0.4 GB
+branch_1s                1,510,000       0.3 GB
+compressed_30s_fallback  1,120,000       0.2 GB
+                        ------------------------
+                        total            ~7.5 GB
+```
+
+Projection, not a measurement: survivor counts for stages 2--9 are extrapolated
+from the 200,000-case pilot survival rates and will differ. A resumed run also
+rewrites the pending survivor file, which reached 403 MB at 38% of stage 1.
+
+Against 69.4 GB free this fits, but 10.6% free is still thin for a run that
+sits alongside 82.76 GB of existing regenerable logs, and the malformed cache
+above shows the volume can produce write damage. Reclaiming space before a long
+run is the cheap insurance.
+
 ## Recommended resume command
 
 Sequential mode avoids the multiprocessing transport entirely and, with the
