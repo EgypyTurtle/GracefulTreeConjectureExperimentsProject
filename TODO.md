@@ -16,12 +16,28 @@ enumerate a defined family
 
 ## 1. Finish the non-spider 5-leaf family at 65 edges
 
-Status: **61--62 complete; 63--65 remain; do not expand beyond 65 edges**.
+Status: **63 complete and frozen; edge 64 in progress (37.8%); 65 not started; do
+not expand beyond 65 edges**.
 
 - [x] Complete and audit edges 61--62. The final total is 8,360,608 solved
   cases after replay, with independent verification of all replay certificates.
-- [ ] Run and audit edge 63, then edge 64 and edge 65, keeping each layer's
-  first-pass and replay logs separate.
+- [x] Run and audit edge 63. Closed by alternative certificate searches: all 93
+  initial hard rows solved, all new certificates independently verified. The
+  cumulative total through edge 63 is 76,946,647 solved certificates with zero
+  unresolved after replay.
+- [ ] Finish edge 64. The frozen universe is 10,040,677 cases. The first
+  cascade stage, `compressed_0.5s`, is at 3,800,064 processed (1,291,124 solved,
+  2,508,940 survivors, 0 errors) with 37 verification checkpoints all passing.
+  Later stages are not started.
+- [ ] Resolve the edge 64 production stall before the next long run. See
+  [docs/edge64_production_stall_incident.md](docs/edge64_production_stall_incident.md):
+  the first attempt wedged on 2026-09-14 and wrote nothing for ~39 hours, and
+  the runner's unbounded verification subprocess was the highest-severity
+  defect. Resolved in the runner, but the exact wedge trigger was never
+  reproduced; treat a resumed run as unproven until it passes the point where
+  the previous one stopped.
+- [ ] Audit edge 65 after 64 closes. Keep each layer's first-pass and replay
+  logs separate.
 - [ ] Record the per-edge case count, first-pass timeouts, replay time, final
   solved count, reduction coverage, and persistent-cache reuse.
 - [x] Recheck the hard-pattern comparison and the 62-edge fixed-core
@@ -29,6 +45,13 @@ Status: **61--62 complete; 63--65 remain; do not expand beyond 65 edges**.
 - [ ] Freeze this family after the 65-edge audit. Further work on it should
   be theorem writing or a clearly isolated algorithm experiment, not an
   automatic jump to 66+ edges.
+
+### Operational note for long runs
+
+The edge 64 stall was only detectable because a process was inspected by hand.
+Any multi-hour run should be started with `--log-file` and monitored on the
+heartbeat file's mtime. A live process whose heartbeat stops advancing is
+wedged, not slow; stop it and record it rather than leaving it running.
 
 ### Reliable five-leaf observations to preserve
 

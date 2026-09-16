@@ -64,8 +64,29 @@ strategies: 12 by a 600-second compressed replay, 2 by a longer branch replay,
 and 3 by a difference-search replay. The independent verifier reported
 `bad=0` on all three replay logs. The edge-63 layer was subsequently closed by
 alternative certificate searches: all 93 initial hard rows were solved, and
-the new certificates passed an independent verifier. Edge 64 is now the next
-unstarted exact layer.
+the new certificates passed an independent verifier.
+
+### Edge 64 (in progress)
+
+Edge 64 is the current exact layer. Its frozen case universe is 10,040,677
+cases, 10.2112% larger than edge 63. Production runs the nine-stage cascade from
+`docs/edge64_baseline_status.md` and is resumable from per-batch checkpoints.
+
+```text
+stage            compressed_0.5s (1 of 9)
+processed        3,800,064 / 10,040,677   (37.8%)
+solved           1,291,124
+survivors        2,508,940
+errors           0
+verified         37 checkpoints, all PASS
+```
+
+The first production attempt stalled on 2026-09-14 and wrote nothing for about
+39 hours; a second attempt could not start a worker pool in the restricted
+environment used for the investigation. Both the incident and the repairs are
+recorded in
+[docs/edge64_production_stall_incident.md](docs/edge64_production_stall_incident.md).
+No certificate data was lost, and the layer is resumable.
 
 Other recorded experiments:
 
@@ -175,6 +196,29 @@ python src/verify_certificates.py `
   --log results/five_leaf_nonspider_edges40_branch.csv
 ```
 
+## Edge 64 Production
+
+Edge 64 is driven by `src/edge64_full_production.py`, which streams the frozen
+10,040,677-case manifest through the nine-stage cascade and is resumable from
+per-batch checkpoints. Resume it in sequential mode:
+
+```powershell
+python src/edge64_full_production.py `
+  --workers 0 `
+  --batch-size 512 `
+  --log-file results/edge64_full_production_v1/production_heartbeat.log
+```
+
+`--workers 0` runs the stage in-process with no multiprocessing transport,
+which also makes it usable where `ProcessPoolExecutor` cannot create its wakeup
+pipe. On a machine with two usable cores, `--workers 2 --chunk-size 16` uses a
+pool instead.
+
+Monitor the **heartbeat file**, not the process. It gains one line per batch; if
+its mtime stops advancing while the process is alive, the run is wedged rather
+than slow — stop it and report it, as in
+[docs/edge64_production_stall_incident.md](docs/edge64_production_stall_incident.md).
+
 ## Tree Families and Methods
 
 After suppressing degree-2 vertices, every non-spider five-leaf tree has one
@@ -259,6 +303,8 @@ Key documents:
 - [docs/technical_report.md](docs/technical_report.md): technical report;
 - [docs/runbook.md](docs/runbook.md): replay and recovery commands;
 - [docs/research_roadmap.md](docs/research_roadmap.md): execution plan;
+- [docs/edge64_baseline_status.md](docs/edge64_baseline_status.md): edge 64 baseline and hard tail;
+- [docs/edge64_production_stall_incident.md](docs/edge64_production_stall_incident.md): edge 64 production stall and repairs;
 - [docs/paper_outline.md](docs/paper_outline.md): article outline.
 
 Full CSV logs and the SQLite cache remain local because they can reach multiple

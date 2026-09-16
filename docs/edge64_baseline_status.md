@@ -104,13 +104,27 @@ confidence interval or a closure result.
 ```text
 classification: EDGE64_NEW_DIFFICULTY
 next mode: SOLVER_OPTIMIZATION
-edge64 full production: not started
+edge64 full production: started 2026-09-13, in progress
 edge63 C8 line: frozen
 ```
 
 The next justified work is targeted solver profiling of the two remaining
 30-second cases and the late-branching tail. A new structural theorem search is
 not justified by the current evidence.
+
+### Full production progress
+
+`src/edge64_full_production.py` runs the frozen 10,040,677-case universe through
+the nine-stage cascade, resumably. As of 2026-09-16 the first stage,
+`compressed_0.5s`, stands at 3,800,064 processed cases (37.8%), with 1,291,124
+solved, 2,508,940 survivors, 0 errors, and 37 verification checkpoints passing.
+The later eight stages have not started.
+
+The first attempt stalled on 2026-09-14 and wrote nothing for roughly 39 hours;
+the stall, the evidence that ruled out the obvious causes, and the repairs to
+the runner are recorded in
+[edge64_production_stall_incident.md](edge64_production_stall_incident.md).
+No certificate data was lost and the layer remains resumable.
 
 ## Reproducibility artifacts
 
@@ -119,6 +133,9 @@ The source runners are:
 ```text
 src/edge64_baseline.py
 src/edge64_hardtail.py
+src/edge64_full_production.py
+src/edge64_full_production_verify.py
+src/diag_stuck_batch.py   (replays one manifest batch; used to test for hangs)
 ```
 
 Large manifests, raw CSV logs, SQLite caches, and generated binary tables stay
