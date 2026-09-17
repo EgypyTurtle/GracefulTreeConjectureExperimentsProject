@@ -136,6 +136,35 @@ It does not affect the adopted changes, since `default` ordering is what
 production runs. `placement` should not be selected for a production run until
 this is reproduced and bounded.
 
+## Where the remaining time goes, and why this is where optimization stops
+
+Phase attribution over the same whole-universe sample, split into per-case
+overhead versus the search itself:
+
+```text
+phase               seconds    share    us/case
+reconstruction         0.03     0.1%      27.4
+adjacency build        0.06     0.2%      47.3
+constructive fastpaths 0.06     0.2%      49.9
+pendant extension     34.11    99.6%   28424.2   <- the search itself
+TOTAL                 34.26   100.0%   28548.7
+```
+
+All per-case overhead combined is **0.53%** of runtime. There is no meaningful
+throughput left to reclaim: the cost is the base search, and the only lever on
+that is node count, which the ordering study above shows has no generally better
+setting. Further optimization would have to change the search's pruning power
+rather than its constant factors, which is a different and riskier kind of change
+than this pass.
+
+## Disk reclaimed
+
+Because the persistent cache is now off by default, the per-worker cache files it
+had accumulated are dead weight: 26 files totalling **1.1 GB** in
+`results/edge64_full_production_v1/case_results/compressed_0.5s/` were removed,
+leaving only the 128 batch result files. A resumed run no longer creates them at
+all.
+
 ## Reproduce
 
 ```powershell
