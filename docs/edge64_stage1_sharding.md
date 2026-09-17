@@ -96,6 +96,30 @@ before they were fixed:
 
 ## Operational notes
 
+### Pushing to the remote from this machine
+
+`git push` fails here with the default TLS backend:
+
+```text
+schannel: AcquireCredentialsHandle failed: SEC_E_NO_CREDENTIALS
+```
+
+The same failure appears in ordinary PowerShell HTTPS requests. It is a local
+TLS/credential-store problem, not a repository or remote problem: the machine's
+schannel backend cannot acquire a credentials handle. The OpenSSL backend that
+ships with Git for Windows works, and Git Credential Manager can start once the
+sandbox is not blocking its helper process:
+
+```powershell
+git -c http.sslBackend=openssl push origin main
+```
+
+Setting `http.sslBackend=openssl` in the local config makes this permanent, at
+the cost of hiding the underlying schannel problem. The per-command form is
+preferred so the broken default stays visible.
+
+### Running a sharded stage
+
 A sharded run needs a single supervisor. The working procedure is:
 
 ```powershell
