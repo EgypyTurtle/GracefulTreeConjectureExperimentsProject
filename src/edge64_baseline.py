@@ -300,7 +300,14 @@ def options(method: str, time_limit: float, cache_db: str, adaptive: bool = Fals
         no_constructive_fastpath=False,
         time_limit=time_limit,
         diff_candidates=None,
-        extension_fastpath_nodes=2_000,
+        # 2,000 nodes was low enough that the pendant reduction failed on a large
+        # minority of compressed-stage cases and fell through to the full branch
+        # search, which consumed about half of all search nodes for the stage.
+        # Measured across three disjoint 400--1,000 case samples, 20,000 nodes
+        # removes essentially all of those fallbacks and is *faster* on average,
+        # because a case that would have burned its whole time budget in the
+        # fallback now finishes a bounded reduction search instead.
+        extension_fastpath_nodes=20_000,
         extension_cache_size=100_000,
         extension_cache_db=cache_db,
         extension_try_all_paths=False,
