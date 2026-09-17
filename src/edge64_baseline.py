@@ -311,6 +311,13 @@ def options(method: str, time_limit: float, cache_db: str, adaptive: bool = Fals
         extension_cache_size=100_000,
         extension_cache_db=cache_db,
         extension_try_all_paths=False,
+        # The disk certificate cache is keyed by reduced rooted skeleton and
+        # never hit on the edge 64 universe: a 400-case probe of the compressed
+        # stage recorded 0 hits while still paying a SQLite round trip per case,
+        # and the per-worker cache files grew past 1 GB.  The in-memory cache has
+        # no such overhead and stays on.  Disabling the disk cache measured 1.18x
+        # on top of the feasible_remaining early-exit fix.
+        extension_persistent_cache=False,
         extension_adaptive_budget=adaptive,
         extension_adaptive_nodes=100_000,
         spider_order="long",

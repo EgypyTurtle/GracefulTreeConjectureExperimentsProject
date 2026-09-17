@@ -822,6 +822,7 @@ def solve_graceful_branch_differences(
     fixed_zero_vertex: int | None = None,
     max_nodes: int | None = None,
     trace: dict | None = None,
+    move_order: str = "default",
 ) -> tuple[list[int] | None, SearchStats]:
     n = len(adj)
     m = n - 1
@@ -889,7 +890,15 @@ def solve_graceful_branch_differences(
                 changes.append((vertex, label))
             return True, changes
 
-        def candidate_moves(d: int) -> list[tuple[int, list[tuple[int, int]]]]:
+        def scan_moves(d: int, stop_at_first: bool) -> list[tuple[int, list[tuple[int, int]]]]:
+            """Collect legal moves for difference ``d``.
+
+            ``stop_at_first`` is the feasibility question ("does any move exist?")
+            rather than the branching question ("which move do I try first?").
+            Existence needs no ranking and no ordering, and it is asked once per
+            explored move, so building and sorting the full list there was pure
+            waste -- the shape many hard cases were spending their budget on.
+            """
             moves = []
             for edge_index, (u, v) in enumerate(edges):
                 if used_edge[edge_index]:
@@ -911,22 +920,41 @@ def solve_graceful_branch_differences(
                         ok, changes = can_place(d, edge_index, low, high_at_u)
                         if not ok:
                             continue
+                        if stop_at_first:
+                            return [(edge_index, changes)]
                         placed_now = 2 - len(changes)
                         branch_touch = int(u in branch_vertices) + int(v in branch_vertices)
                         near_branch = -(branch_dist[u] + branch_dist[v])
                         extremeness = sum(max(label, m - label) for _vertex, label in changes)
                         moves.append((edge_index, changes, placed_now, branch_touch, near_branch, extremeness))
+            if stop_at_first:
+                return []
             if seed is not None:
                 rng.shuffle(moves)
-            moves.sort(key=lambda item: (-item[2], -item[3], -item[4], -item[5], item[0]))
+            # Move ordering is the main lever on node count for this search, so
+            # the key is selectable rather than fixed; "default" reproduces the
+            # historical ordering exactly.
+            if move_order == "placement":
+                moves.sort(key=lambda item: (-item[2], item[0]))
+            elif move_order == "branch_first":
+                moves.sort(key=lambda item: (-item[3], -item[4], item[0]))
+            elif move_order == "edge_index":
+                moves.sort(key=lambda item: item[0])
+            elif move_order == "extremeness":
+                moves.sort(key=lambda item: (-item[5], -item[2], item[0]))
+            else:
+                moves.sort(key=lambda item: (-item[2], -item[3], -item[4], -item[5], item[0]))
             trimmed = [(edge_index, changes) for edge_index, changes, *_rest in moves]
             _trace_branching(trace, m - d, len(trimmed))
             if max_candidates_per_diff is not None and len(trimmed) > max_candidates_per_diff:
                 return trimmed[:max_candidates_per_diff]
             return trimmed
 
+        def candidate_moves(d: int) -> list[tuple[int, list[tuple[int, int]]]]:
+            return scan_moves(d, stop_at_first=False)
+
         def feasible_remaining(next_d: int) -> bool:
-            return next_d <= 0 or bool(candidate_moves(next_d))
+            return next_d <= 0 or bool(scan_moves(next_d, stop_at_first=True))
 
         def backtrack(d: int) -> bool:
             if timed_out():
@@ -1258,10 +1286,21 @@ def solve_graceful_pendant_extension(
     cache_db: str | None = None,
     try_all_paths: bool = False,
     trace: dict | None = None,
+    use_persistent_cache: bool = False,
+    move_order: str = "default",
 ) -> tuple[list[int] | None, SearchStats]:
-    """Reduce pendant paths to one edge, then rebuild by extremal extension."""
+    """Reduce pendant paths to one edge, then rebuild by extremal extension.
+
+    ``use_persistent_cache`` is opt-in.  The disk cache is keyed by the reduced
+    rooted skeleton, and on the edge 64 universe it is nearly worthless: a
+    400-case probe of the compressed stage recorded zero hits.  What it does cost
+    is real, though -- opening it resolves the cache path with ``Path.resolve()``
+    (about 230 us per worker process, measured) and every miss adds a SQLite
+    round trip, while the cache files grow to hundreds of megabytes.  The
+    in-memory cache has no such overhead and stays enabled.
+    """
     started_at = time.time()
-    if cache_db:
+    if cache_db and use_persistent_cache:
         open_pendant_extension_cache(cache_db)
     candidates = [path for path in pendant_paths(adj) if len(path) > 2]
     if not candidates:
@@ -1276,12 +1315,12 @@ def solve_graceful_pendant_extension(
     last_extended_edges = 0
     for path_index, path in enumerate(candidates):
         kept, reduced_adj, reduced_leaf, cache_key, canonical_order = pendant_reduction_data(adj, path)
-        reduction_base = hashlib.sha256(cache_key.encode("ascii")).hexdigest()[:16]
+        reduction_base = hashlib.sha256(cache_key.encode("ascii")).hexdigest()[:16] if trace is not None else ""
         last_base = reduction_base
         last_extended_edges = len(path) - 2
         cached_labels = _PENDANT_EXTENSION_CACHE.get(cache_key) if cache_size > 0 else None
         cache_strategy = "pendant-extension-cache"
-        if cached_labels is None and cache_db:
+        if cached_labels is None and cache_db and use_persistent_cache:
             cached_labels = persistent_cache_get(cache_key, cache_size)
             if cached_labels is not None:
                 cache_strategy = "pendant-extension-disk-cache"
@@ -1305,6 +1344,7 @@ def solve_graceful_pendant_extension(
                 fixed_zero_vertex=reduced_leaf,
                 max_nodes=remaining_nodes,
                 trace=trace,
+                move_order=move_order,
             )
             total_nodes += path_stats.nodes
             total_backtracks += path_stats.backtracks
@@ -1319,7 +1359,8 @@ def solve_graceful_pendant_extension(
             certificate = tuple(labels[vertex] for vertex in canonical_order)
             if cache_size > 0 and len(_PENDANT_EXTENSION_CACHE) < cache_size:
                 _PENDANT_EXTENSION_CACHE[cache_key] = certificate
-            persistent_cache_put(cache_key, certificate)
+            if use_persistent_cache:
+                persistent_cache_put(cache_key, certificate)
         target_labels = rebuild_pendant_extension(adj, path, kept, labels)
         if target_labels is not None:
             path_stats.nodes = total_nodes
@@ -1615,6 +1656,8 @@ def solve_tree(adj: list[list[int]], args: argparse.Namespace, seed: int | None 
             cache_db=args.extension_cache_db,
             try_all_paths=args.extension_try_all_paths,
             trace=trace,
+            use_persistent_cache=bool(getattr(args, "extension_persistent_cache", False)),
+            move_order=getattr(args, "extension_move_order", "default"),
         )
         if labels is not None:
             if adaptive_budget:
@@ -1661,6 +1704,7 @@ def solve_tree(adj: list[list[int]], args: argparse.Namespace, seed: int | None 
             seed=seed,
             max_candidates_per_diff=args.diff_candidates,
             trace=trace,
+            move_order=getattr(args, "branch_move_order", "default"),
         )
     if args.method == "tension":
         return solve_graceful_tension(

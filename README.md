@@ -329,6 +329,7 @@ Key documents:
 - [docs/edge64_baseline_status.md](docs/edge64_baseline_status.md): edge 64 baseline and hard tail;
 - [docs/edge64_production_stall_incident.md](docs/edge64_production_stall_incident.md): edge 64 production stall and repairs;
 - [docs/edge64_extension_budget_optimization.md](docs/edge64_extension_budget_optimization.md): compressed-method budget tuning;
+- [docs/edge64_solver_throughput_optimization.md](docs/edge64_solver_throughput_optimization.md): per-case throughput (1.31x) and why the move-ordering idea was rejected;
 - [docs/edge64_stage1_sharding.md](docs/edge64_stage1_sharding.md): multi-core sharding and the `solved` flag defect;
 - [docs/paper_outline.md](docs/paper_outline.md): article outline.
 
