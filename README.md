@@ -75,11 +75,15 @@ cases, 10.2112% larger than edge 63. Production runs the nine-stage cascade from
 ```text
 stage            compressed_0.5s (1 of 9)
 processed        3,800,064 / 10,040,677   (37.8%)
-solved           1,291,124
-survivors        2,508,940
+solved           3,734,655   (98.28%)
+survivors           65,409
 errors           0
 verified         37 checkpoints, all PASS
 ```
+
+Only about 1.7% of stage-1 cases survive the 0.5-second budget, so the later
+cascade stages shrink very quickly. The whole remaining cascade is projected at
+roughly 2 GB of output, not tens of GB.
 
 The first production attempt stalled on 2026-09-14 and wrote nothing for about
 39 hours; a second attempt could not start a worker pool in the restricted
@@ -87,6 +91,12 @@ environment used for the investigation. Both the incident and the repairs are
 recorded in
 [docs/edge64_production_stall_incident.md](docs/edge64_production_stall_incident.md).
 No certificate data was lost, and the layer is resumable.
+
+Two corrections worth noting for anyone reading older notes: the stage-1
+`stage_progress` JSON carries stale counters from an earlier resumed attempt and
+should not be quoted, and the compressed method's rooted-base budget was raised
+from 2,000 to 20,000 nodes
+([docs/edge64_extension_budget_optimization.md](docs/edge64_extension_budget_optimization.md)).
 
 Other recorded experiments:
 
@@ -200,7 +210,25 @@ python src/verify_certificates.py `
 
 Edge 64 is driven by `src/edge64_full_production.py`, which streams the frozen
 10,040,677-case manifest through the nine-stage cascade and is resumable from
-per-batch checkpoints. Resume it in sequential mode:
+per-batch checkpoints. Stage 1 is a full pass over the universe and dominates
+the layer's cost, so it is run sharded across independent processes:
+
+```powershell
+foreach ($i in 0..11) {
+  Start-Process python -NoNewWindow -ArgumentList `
+    'src/edge64_full_production.py','--workers','0','--batch-size','512',`
+    '--shard-index',"$i",'--shard-count','12',`
+    '--log-file',"results/edge64_full_production_v1/heartbeat.shard$('{0:D2}' -f $i).log"
+}
+```
+
+Shards need no IPC, which also makes them usable where `ProcessPoolExecutor`
+cannot create its wakeup pipe. Monitor with `python src/diag_shard_status.py`.
+Once every shard finishes, restore manifest order for the next stage with
+`--merge-shards 12`.
+
+A single unsharded run is still supported and is the right choice for the small
+later stages:
 
 ```powershell
 python src/edge64_full_production.py `
@@ -208,11 +236,6 @@ python src/edge64_full_production.py `
   --batch-size 512 `
   --log-file results/edge64_full_production_v1/production_heartbeat.log
 ```
-
-`--workers 0` runs the stage in-process with no multiprocessing transport,
-which also makes it usable where `ProcessPoolExecutor` cannot create its wakeup
-pipe. On a machine with two usable cores, `--workers 2 --chunk-size 16` uses a
-pool instead.
 
 Monitor the **heartbeat file**, not the process. It gains one line per batch; if
 its mtime stops advancing while the process is alive, the run is wedged rather
@@ -305,6 +328,8 @@ Key documents:
 - [docs/research_roadmap.md](docs/research_roadmap.md): execution plan;
 - [docs/edge64_baseline_status.md](docs/edge64_baseline_status.md): edge 64 baseline and hard tail;
 - [docs/edge64_production_stall_incident.md](docs/edge64_production_stall_incident.md): edge 64 production stall and repairs;
+- [docs/edge64_extension_budget_optimization.md](docs/edge64_extension_budget_optimization.md): compressed-method budget tuning;
+- [docs/edge64_stage1_sharding.md](docs/edge64_stage1_sharding.md): multi-core sharding and the `solved` flag defect;
 - [docs/paper_outline.md](docs/paper_outline.md): article outline.
 
 Full CSV logs and the SQLite cache remain local because they can reach multiple

@@ -15,14 +15,35 @@ data was lost.
 ```text
 stage                     compressed_0.5s  (1 of 9)
 processed                 3,800,064 / 10,040,677  (37.8%)
-solved                    1,291,124
-survivors                 2,508,940
+solved                    3,734,655   (98.28%)
+survivors                    65,409
 errors                    0
 nodes                     3,890,199,289
 throughput                27,823 nodes/s over 139,818 s
 verified checkpoints      37, all PASS (bad = 0)
-pending survivors file     403,087,546 bytes, 2,508,940 rows
+pending survivors file    18,744,138 bytes
 ```
+
+### Correction to the first report of this incident
+
+The figures above come from the authoritative per-checkpoint CSV,
+`checkpoint_progress.csv`, and were re-derived independently by counting the
+`solved` column of all 7,471 stored batch files: 3,759,475 solved out of
+3,825,152 cases, a 98.28% solve rate, consistent with the CSV.
+
+The first report of this incident instead quoted `solved = 1,291,124` and
+`survivors = 2,508,940`, read from `stage_progress/compressed_0.5s.json`
+without cross-checking. That JSON is a *stale* artifact: the production run had
+been resumed from these same batch files under an earlier, differently
+configured attempt, and the stage-progress file carried that attempt's counters
+forward. `checkpoint_progress.csv` appends one row per checkpoint instead of
+overwriting, so it retained the true progression and supersedes the JSON. Both
+figures are corrected here and in every document that quoted them.
+
+This is not only bookkeeping. The stale survivor count implied that each later
+cascade stage would reprocess millions of cases, which inflated the projected
+storage and runtime for the remaining run by more than an order of magnitude.
+The real survivor rate after stage 1 is about 1.7%, not 66%.
 
 The stalled process:
 
@@ -77,7 +98,7 @@ property of those inputs.
 ## Contributing defects found in the runner
 
 Reviewing `src/edge64_full_production.py` while the evidence above was being
-collected surfaced three defects, all independent of the exact wedge trigger:
+collected surfaced four defects, all independent of the exact wedge trigger:
 
 1. `verify_checkpoint()` called `subprocess.run(...)` with **no timeout**. The
    parent blocks on that child, so one stuck verifier silently stalls the whole
@@ -87,6 +108,13 @@ collected surfaced three defects, all independent of the exact wedge trigger:
 3. The pool was driven with `chunksize=1` over 512-case batches — 19,610
    round trips per stage — so per-task IPC cost dominated the common case, in
    which most cases solve in milliseconds.
+4. The `solved` flag was compared against the literal `"1"` while freshly
+   computed rows carry it as an `int`, so the pending-survivor filter admitted
+   every case, the solved counter stayed at 0, and the per-checkpoint
+   certificate gate never fired. Found later, during sharded-run validation; see
+   [edge64_stage1_sharding.md](edge64_stage1_sharding.md). This is a plausible
+   but unproven contributor to the wedge itself: a pending file far larger than
+   the true survivor count is a plausible way to run the process into trouble.
 
 ## Reproduction constraint
 
@@ -112,6 +140,13 @@ restricted-environment resume   new --workers 0 (or any value < 1) runs the
 silent stalls                   new --log-file appends one heartbeat line per
                                 batch, so progress is visible without waiting
                                 for a 100,000-case checkpoint
+solved-flag type mismatch       one is_solved() helper used by the survivor
+                                filter, the solved counter, and the checkpoint
+                                certificate gate
+single-core ceiling             new --shard-index/--shard-count split a stage
+                                across independent processes with no shared
+                                state and no IPC, plus --merge-shards to
+                                restore manifest order for the next stage
 ```
 
 `src/diag_stuck_batch.py` is retained as the replay harness used to test the
@@ -172,32 +207,40 @@ sqlite certificate caches (per worker)   0.97 GB     0.106 kB
 
 Only the first two scale with stage input. The sqlite caches are per-worker
 files that a sequential resume does not create at all, so a stage costs roughly
-`input_cases * 0.20 kB`; scaling the first stage to the full universe gives
+`input_cases * 0.20 kB`. Scaling the first stage to the full universe gives
 about 2.0 GB.
+
+Each later stage takes as input only the previous stage's survivors. With the
+corrected 1.71% survivor rate after stage 1, and the per-budget survival rates
+measured by the 200,000-case pilot (0.5 s → 32.9%, 1 s → 23.7%, 2 s → 13.0%,
+5 s → 7.7%), the cascade shrinks very quickly:
 
 ```text
 stage                  input cases    projected
 compressed_0.5s         10,040,677       2.0 GB
-compressed_1s            6,629,000       1.3 GB
-compressed_2s            5,070,000       1.0 GB
-compressed_5s            4,459,000       0.9 GB
-diff_1s                  3,790,000       0.8 GB
-tension_1s               2,530,000       0.5 GB
-hybrid_1s                2,000,000       0.4 GB
-branch_1s                1,510,000       0.3 GB
-compressed_30s_fallback  1,120,000       0.2 GB
+compressed_1s              171,600       0.03 GB
+compressed_2s               56,500       0.01 GB
+compressed_5s                7,300       0.01 GB
+diff_1s                      1,700       0.01 GB
+tension_1s                     500       0.01 GB
+hybrid_1s                      100       0.01 GB
+branch_1s                       30       0.01 GB
+compressed_30s_fallback         10       0.01 GB
                         ------------------------
-                        total            ~7.5 GB
+                        total            ~2.1 GB
 ```
 
-Projection, not a measurement: survivor counts for stages 2--9 are extrapolated
-from the 200,000-case pilot survival rates and will differ. A resumed run also
-rewrites the pending survivor file, which reached 403 MB at 38% of stage 1.
+An earlier revision of this section projected ~7.5 GB and stages of millions of
+cases each, because it was driven by the stale survivor count. That was wrong by
+roughly a factor of 40; the corrected figure is about **2.1 GB for the entire
+remaining cascade**.
 
-Against 69.4 GB free this fits, but 10.6% free is still thin for a run that
-sits alongside 82.76 GB of existing regenerable logs, and the malformed cache
-above shows the volume can produce write damage. Reclaiming space before a long
-run is the cheap insurance.
+Projection, not a measurement: stages 2--9 are extrapolated and will differ. The
+pending survivor file grows to roughly 19 MB per 3.8 M cases of stage input.
+
+Against ~70 GB free this is comfortable. The malformed cache recorded above
+still shows the volume can produce write damage, so keeping headroom is
+worthwhile, but space is no longer a constraint on finishing this layer.
 
 ## Recommended resume command
 

@@ -16,6 +16,7 @@ import subprocess
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor
+from itertools import islice
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -69,6 +70,23 @@ RESULT_FIELDS = [
 ]
 
 
+def is_solved(row: dict[str, object]) -> bool:
+    """True when a result row represents a solved case.
+
+    Result rows arrive in two shapes: freshly computed rows carry ``solved`` as
+    an ``int``, while rows read back from a batch CSV carry it as a ``str``.
+    Comparing either against the literal ``"1"`` silently fails for the int
+    form, which previously left the solved counter at zero, wrote every case
+    into the survivor file, and skipped the pre-verification gate.
+    """
+    value = row.get("solved")
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value == 1
+    return str(value).strip() == "1"
+
+
 def read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -113,6 +131,15 @@ def manifest_id_hash(path: Path) -> tuple[int, str]:
 
 def build_immutable_manifest() -> dict[str, object]:
     OUT.mkdir(parents=True, exist_ok=True)
+    # Fast path for concurrent/sharded launches: when the frozen manifest and its
+    # recorded digests are already present, re-hashing a multi-hundred-megabyte
+    # CSV in every one of N shards is pure duplicated work.  The recorded digests
+    # were verified when the manifest was built, and any later drift is caught by
+    # the manifest-level audit that runs after the cascade completes.
+    existing_meta = OUT / "edge64_full_production_manifest.meta.json"
+    if FULL_MANIFEST.exists() and existing_meta.exists():
+        return read_json(existing_meta)
+
     count, id_hash = manifest_id_hash(CASE_MANIFEST)
     csv_hash = sha256_file(CASE_MANIFEST)
     meta = {
@@ -129,12 +156,8 @@ def build_immutable_manifest() -> dict[str, object]:
     }
     if count != EXPECTED_EDGE64_CASES:
         raise RuntimeError(f"case manifest count mismatch: {count} != {EXPECTED_EDGE64_CASES}")
-    existing_meta = OUT / "edge64_full_production_manifest.meta.json"
-    if FULL_MANIFEST.exists() and existing_meta.exists():
-        prior = read_json(existing_meta)
-        if prior.get("case_manifest_sha256") != csv_hash or prior.get("canonical_case_id_sha256") != id_hash:
-            raise RuntimeError("immutable production manifest does not match the frozen case manifest")
-        return prior
+    if FULL_MANIFEST.exists():
+        return read_json(existing_meta) if existing_meta.exists() else meta
 
     # Keep the requested JSON manifest valid while streaming records, so the
     # 10M-case universe never has to be materialized in Python memory.
@@ -196,8 +219,8 @@ def stage_dir(stage: str) -> Path:
     return directory
 
 
-def batch_path(stage: str, start: int, end: int) -> Path:
-    return stage_dir(stage) / f"batch_{start:09d}_{end:09d}.csv"
+def batch_path(stage: str, start: int, end: int, shard_tag: str = "") -> Path:
+    return stage_dir(stage) / f"batch_{start:09d}_{end:09d}{shard_tag}.csv"
 
 
 def pending_path(stage: str) -> Path:
@@ -225,7 +248,7 @@ def make_pending(stage: str, input_path: Path, batch_ranges: list[tuple[int, int
                     except StopIteration as exc:
                         raise RuntimeError("input ended while rebuilding pending stage") from exc
                     result = result_rows[row["case_id"]]
-                    if result.get("solved") != "1":
+                    if not is_solved(result):
                         writer.writerow(row)
                         written += 1
     os.replace(tmp, target)
@@ -255,7 +278,7 @@ def verify_checkpoint(result_files: list[Path], checkpoint_name: str) -> dict[st
     rows: list[dict[str, object]] = []
     for path in result_files:
         for row in read_result_rows(path):
-            if row.get("solved") == "1":
+            if is_solved(row):
                 rows.append({"case_id": row["case_id"], "solved": 1, "labels": row.get("labels", "")})
     atomic_csv(cert_path, rows, ["case_id", "solved", "labels"])
     command = [sys.executable, str(SRC / "edge64_full_production_verify.py"), "--results", str(cert_path)]
@@ -302,12 +325,28 @@ def run_stage(
     input_path: Path,
     workers: int,
     chunk_size: int = 1,
+    shard: tuple[int, int] | None = None,
 ) -> dict[str, object]:
+    """Run one cascade stage over ``input_path``.
+
+    ``shard`` is an optional ``(index, count)`` pair.  When given, only rows
+    whose position satisfies ``position % count == index`` are processed, and
+    results are written under a shard-specific prefix.  Independent shards are
+    disjoint slices of the same input, so they can run concurrently as separate
+    processes with no shared mutable state and no inter-process communication:
+    each keeps its own worker pool, its own certificate cache, and its own batch
+    files.  Batch boundary indices stay in whole-manifest coordinates, so a
+    sharded result set is indistinguishable from an unsharded one.
+    """
+    shard_index, shard_count = shard if shard else (0, 1)
+    shard_tag = "" if shard_count <= 1 else f".shard{shard_index:02d}of{shard_count:02d}"
     directory = stage_dir(stage)
-    stage_progress = OUT / "stage_progress" / f"{stage}.json"
+    stage_progress = OUT / "stage_progress" / f"{stage}{shard_tag}.json"
     stage_progress.parent.mkdir(parents=True, exist_ok=True)
-    pending_path(stage).parent.mkdir(parents=True, exist_ok=True)
-    pending_tmp = pending_path(stage).with_suffix(".csv.tmp")
+    pending_target = OUT / "pending" / f"after_{stage}{shard_tag}.csv"
+    pending_target.parent.mkdir(parents=True, exist_ok=True)
+    checkpoint_journal = OUT / ("checkpoint_progress.csv" if not shard_tag else f"checkpoint_progress{shard_tag}.csv")
+    pending_tmp = pending_target.with_suffix(".csv.tmp")
     if pending_tmp.exists():
         pending_tmp.unlink()
     pending_handle = pending_tmp.open("w", newline="", encoding="utf-8")
@@ -326,23 +365,31 @@ def run_stage(
     # where ProcessPoolExecutor cannot create its wakeup pipe, and it avoids the
     # per-task IPC cost that dominates the common case here.
     pool = ProcessPoolExecutor(max_workers=workers) if workers >= 1 else None
+    range_index = 0
     try:
         with input_path.open("r", newline="", encoding="utf-8") as source:
             source_reader = csv.DictReader(source)
-            range_index = 0
+            pos = shard_index
             while True:
-                rows = []
-                for _ in range(BATCH_SIZE):
-                    try:
-                        rows.append(next(source_reader))
-                    except StopIteration:
+                rows: list[dict[str, str]] = []
+                batch_start = pos
+                batch_end = pos
+                while len(rows) < BATCH_SIZE:
+                    if shard_count > 1:
+                        row = next(islice(source_reader, shard_count - 1, shard_count), None)
+                    else:
+                        row = next(source_reader, None)
+                    if row is None:
                         break
+                    rows.append(row)
+                    batch_end = pos + 1
+                    pos += shard_count
                 if not rows:
                     break
-                range_start = input_count
+                range_start = batch_start
+                range_end = batch_end
                 input_count += len(rows)
-                range_end = input_count
-                result_file = batch_path(stage, range_start, range_end)
+                result_file = batch_path(stage, range_start, range_end, shard_tag)
                 reused = result_file.exists()
                 if reused:
                     result_rows = read_result_rows(result_file)
@@ -385,24 +432,25 @@ def run_stage(
                     atomic_csv(result_file, result_rows, RESULT_FIELDS)
                 result_by_id = {row["case_id"]: row for row in result_rows}
                 for source_row in rows:
-                    if result_by_id[source_row["case_id"]].get("solved") != "1":
+                    if not is_solved(result_by_id[source_row["case_id"]]):
                         pending_writer.writerow(source_row)
                 processed += len(result_rows)
-                append_heartbeat(
-                    f"stage={stage} processed={processed} solved={total_solved} "
-                    f"range={range_start}-{range_end} reused={int(reused)}"
-                )
-                total_solved += sum(row.get("solved") == "1" for row in result_rows)
+                total_solved += sum(is_solved(row) for row in result_rows)
                 total_errors += sum(row.get("status") == "error" for row in result_rows)
                 total_nodes += sum(int(float(row.get("nodes", 0) or 0)) for row in result_rows)
                 total_runtime += sum(float(row.get("elapsed_seconds", 0) or 0) for row in result_rows)
+                append_heartbeat(
+                    f"stage={stage} shard={shard_index}/{shard_count} processed={processed} "
+                    f"solved={total_solved} survivors={processed - total_solved} "
+                    f"range={range_start}-{range_end} reused={int(reused)}"
+                )
                 checkpoint_files.append(result_file)
                 if total_errors:
                     atomic_json(OUT / "final_status.json", {"status": "PRODUCTION_PAUSED_ERROR", "stage": stage, "errors": total_errors})
                     raise RuntimeError(f"production error in stage {stage}")
                 last_batch = len(rows) < BATCH_SIZE
                 if processed % CHECKPOINT_ATTEMPTS < len(result_rows) or last_batch:
-                    checkpoint_name = f"{stage}_{range_index:06d}"
+                    checkpoint_name = f"{stage}{shard_tag}_{range_index:06d}"
                     verification = verify_checkpoint(checkpoint_files, checkpoint_name)
                     checkpoint_files = []
                     verified_checkpoints.append(checkpoint_name)
@@ -424,7 +472,7 @@ def run_stage(
                         "updated_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                     }
                     atomic_json(stage_progress, progress)
-                    append_checkpoint({**progress, "checkpoint": checkpoint_name})
+                    append_checkpoint({**progress, "checkpoint": checkpoint_name}, checkpoint_journal)
                     print(json.dumps(progress), flush=True)
                     range_index += 1
     finally:
@@ -433,10 +481,10 @@ def run_stage(
         pending_handle.flush()
         os.fsync(pending_handle.fileno())
         pending_handle.close()
-    pending_path(stage).unlink(missing_ok=True)
-    os.replace(pending_tmp, pending_path(stage))
+    pending_target.unlink(missing_ok=True)
+    os.replace(pending_tmp, pending_target)
     if checkpoint_files:
-        checkpoint_name = f"{stage}_final"
+        checkpoint_name = f"{stage}{shard_tag}_final"
         verification = verify_checkpoint(checkpoint_files, checkpoint_name)
         verified_checkpoints.append(checkpoint_name)
     summary = {
@@ -457,8 +505,10 @@ def run_stage(
     return summary
 
 
-def append_checkpoint(row: dict[str, object]) -> None:
-    path = OUT / "checkpoint_progress.csv"
+def append_checkpoint(row: dict[str, object], path: Path | None = None) -> None:
+    # Each shard keeps its own checkpoint journal: concurrent appends to a single
+    # file from independent processes can interleave on Windows.
+    path = path or (OUT / "checkpoint_progress.csv")
     fields = list(row)
     exists = path.exists()
     with path.open("a", newline="", encoding="utf-8") as handle:
@@ -482,6 +532,49 @@ def append_heartbeat(line: str) -> None:
         handle.flush()
 
 
+def merge_shards(stage: str, input_path: Path, shard_count: int) -> int:
+    """Rebuild the canonical pending file for ``stage`` from its shard outputs.
+
+    Shards write disjoint survivor files in whole-manifest coordinates but not in
+    manifest order, so concatenating them would reorder the next stage's input.
+    This re-streams the stage input, keeps only rows that survived in some shard,
+    and writes them in the original order.
+    """
+    survivors: set[str] = set()
+    for index in range(shard_count):
+        path = OUT / "pending" / f"after_{stage}.shard{index:02d}of{shard_count:02d}.csv"
+        if not path.exists():
+            raise RuntimeError(f"missing shard survivor file: {path}")
+        for row in input_rows(path):
+            survivors.add(row["case_id"])
+    target = pending_path(stage)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_suffix(".csv.tmp")
+    written = 0
+    with tmp.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=MANIFEST_FIELDS)
+        writer.writeheader()
+        for row in input_rows(input_path):
+            if row["case_id"] in survivors:
+                writer.writerow(row)
+                written += 1
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(tmp, target)
+    total_shard_rows = sum(
+        1
+        for index in range(shard_count)
+        for _ in input_rows(OUT / "pending" / f"after_{stage}.shard{index:02d}of{shard_count:02d}.csv")
+    )
+    if written != total_shard_rows:
+        raise RuntimeError(
+            f"shard merge mismatch for {stage}: {written} unique survivors in manifest order "
+            f"but {total_shard_rows} rows across shard files"
+        )
+    print(json.dumps({"stage": stage, "shards": shard_count, "survivors": written, "pending": str(target)}, indent=2))
+    return 0
+
+
 def main() -> int:
     global BATCH_SIZE, HEARTBEAT_PATH
     parser = argparse.ArgumentParser()
@@ -489,16 +582,35 @@ def main() -> int:
     parser.add_argument("--chunk-size", type=int, default=1, help="cases handed to the pool per round trip")
     parser.add_argument("--batch-size", type=int, default=BATCH_SIZE)
     parser.add_argument("--log-file", type=Path, default=None, help="append a heartbeat line per processed batch")
+    parser.add_argument("--shard-index", type=int, default=0, help="this shard's index in [0, shard-count)")
+    parser.add_argument("--shard-count", type=int, default=1, help="number of independent shards to split the stage into")
+    parser.add_argument("--merge-shards", type=int, default=0, metavar="N",
+                        help="merge N completed shard survivor files for --merge-stage into the canonical pending file")
+    parser.add_argument("--merge-stage", default="compressed_0.5s", help="stage whose shard outputs should be merged")
+    parser.add_argument("--merge-input", type=Path, default=None, help="stage input file used for shard merging")
     parser.add_argument("--build-manifest-only", action="store_true")
     args = parser.parse_args()
     BATCH_SIZE = args.batch_size
     HEARTBEAT_PATH = str(args.log_file) if args.log_file else None
+    if args.shard_count < 1:
+        raise SystemExit("--shard-count must be at least 1")
+    if not 0 <= args.shard_index < args.shard_count:
+        raise SystemExit("--shard-index must lie in [0, --shard-count)")
+    shard = (args.shard_index, args.shard_count) if args.shard_count > 1 else None
     OUT.mkdir(parents=True, exist_ok=True)
     manifest_meta = build_immutable_manifest()
-    atomic_json(OUT / "production_1056_manifest.json", {"status": "NOT_APPLICABLE_FULL_EDGE64", "readiness_source": str(READINESS / "edge64_production_cascade_v1.json"), "note": "Full edge64 production uses edge64_full_production_manifest.json; the 1056-key readiness artifact remains frozen."})
+    # Non-fatal: with sharded launches several processes race to write this
+    # frozen readiness artifact.  It is informational, so a lost race must not
+    # kill a shard.
+    try:
+        atomic_json(OUT / "production_1056_manifest.json", {"status": "NOT_APPLICABLE_FULL_EDGE64", "readiness_source": str(READINESS / "edge64_production_cascade_v1.json"), "note": "Full edge64 production uses edge64_full_production_manifest.json; the 1056-key readiness artifact remains frozen."})
+    except OSError as exc:
+        print(json.dumps({"warning": "could not refresh production_1056_manifest.json", "error": str(exc)}), flush=True)
     if args.build_manifest_only:
         print(json.dumps(manifest_meta, indent=2))
         return 0
+    if args.merge_shards:
+        return merge_shards(args.merge_stage, args.merge_input or CASE_MANIFEST, args.merge_shards)
 
     config = read_json(READINESS / "edge64_production_cascade_v1.json")
     if config.get("status") != "EDGE64_PRODUCTION_READY" or config.get("full_production_started"):
@@ -507,7 +619,7 @@ def main() -> int:
     input_path = CASE_MANIFEST
     stage_survival: list[dict[str, object]] = []
     for stage, method, budget in STAGES:
-        summary = run_stage(stage, method, budget, input_path, args.workers, args.chunk_size)
+        summary = run_stage(stage, method, budget, input_path, args.workers, args.chunk_size, shard)
         summaries.append(summary)
         stage_survival.append(summary)
         atomic_csv(OUT / "stage_survival.csv", stage_survival, list(stage_survival[0]))

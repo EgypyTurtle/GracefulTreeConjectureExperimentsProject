@@ -115,10 +115,22 @@ not justified by the current evidence.
 ### Full production progress
 
 `src/edge64_full_production.py` runs the frozen 10,040,677-case universe through
-the nine-stage cascade, resumably. As of 2026-09-16 the first stage,
-`compressed_0.5s`, stands at 3,800,064 processed cases (37.8%), with 1,291,124
-solved, 2,508,940 survivors, 0 errors, and 37 verification checkpoints passing.
-The later eight stages have not started.
+the nine-stage cascade, resumably. As of 2026-09-17 the first stage,
+`compressed_0.5s`, stands at 3,800,064 processed cases (37.8%), with 3,734,655
+solved (98.28%), 65,409 survivors, 0 errors, and 37 verification checkpoints
+passing. The later eight stages have not started.
+
+Read the survivor count from `checkpoint_progress.csv`, not from
+`stage_progress/compressed_0.5s.json`: the JSON was written by an earlier
+resumed attempt and carries its counters (1,291,124 solved, 2,508,940
+survivors). Counting the `solved` column of the stored batch files independently
+reproduces the CSV figure. The corrected survivor rate after stage 1 is about
+1.7%, so the remaining cascade is projected at roughly 2 GB rather than tens of
+GB.
+
+The compressed method's rooted-base budget was raised from 2,000 to 20,000
+nodes on 2026-09-17; see
+[edge64_extension_budget_optimization.md](edge64_extension_budget_optimization.md).
 
 The first attempt stalled on 2026-09-14 and wrote nothing for roughly 39 hours;
 the stall, the evidence that ruled out the obvious causes, and the repairs to

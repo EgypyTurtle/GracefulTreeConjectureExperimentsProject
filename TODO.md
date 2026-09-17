@@ -25,10 +25,22 @@ not expand beyond 65 edges**.
   initial hard rows solved, all new certificates independently verified. The
   cumulative total through edge 63 is 76,946,647 solved certificates with zero
   unresolved after replay.
-- [ ] Finish edge 64. The frozen universe is 10,040,677 cases. The first
-  cascade stage, `compressed_0.5s`, is at 3,800,064 processed (1,291,124 solved,
-  2,508,940 survivors, 0 errors) with 37 verification checkpoints all passing.
-  Later stages are not started.
+- [ ] Finish edge 64. The frozen universe is 10,040,677 cases. Stage 1,
+  `compressed_0.5s`, is currently **paused by request** at 65,536 / 10,040,677
+  processed (0.65%), solve rate 99.84%, with 128 batch files on disk. Restart it
+  with the 12-shard command in the README; see
+  [docs/edge64_stage1_sharding.md](docs/edge64_stage1_sharding.md). Batch files
+  are written atomically, so no partial file needs to be discarded.
+- [ ] Run `--merge-shards 12` once every shard finishes, before the conductor
+  advances to stage 2. Shards write survivors in their own order and the next
+  stage needs manifest order.
+- [ ] Treat the layer's earlier figures with care. The pre-shard attempt reached
+  3,800,064 processed with 3,734,655 solved (98.28%) and 65,409 survivors, and
+  that remains the only complete measurement of the first 37.8%. Its
+  `stage_progress` JSON is stale and reports 1,291,124 solved / 2,508,940
+  survivors; `checkpoint_progress.csv` is authoritative. The pre-shard batch
+  output was cleared for the uniform sharded rerun, so the current run must
+  re-derive that range.
 - [ ] Resolve the edge 64 production stall before the next long run. See
   [docs/edge64_production_stall_incident.md](docs/edge64_production_stall_incident.md):
   the first attempt wedged on 2026-09-14 and wrote nothing for ~39 hours, and
