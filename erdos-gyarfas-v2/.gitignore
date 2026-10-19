@@ -1,0 +1,14 @@
+out/
+checkpoints/
+logs/
+tests/run-*/
+**/__pycache__/
+*.zip
+*.tar.gz
+artifacts/
+gmon.out
+tests/demo-*/
+tests/bench-*/
+!/results/
+!/results/*.json
+!/data/k14/eg_k14_20261019T071359Z_7f7a4c1a.tar.gz

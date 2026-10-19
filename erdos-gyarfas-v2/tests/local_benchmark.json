@@ -1,0 +1,44 @@
+[
+  {
+    "k": 10,
+    "implementation": "reference",
+    "threads": null,
+    "wall_seconds": 1.0288960000034422,
+    "output": "time taken: 971168 microseconds"
+  },
+  {
+    "k": 10,
+    "implementation": "v2",
+    "threads": 1,
+    "wall_seconds": 0.5083030000096187,
+    "output": "split: depth=1 tasks=27\nsplit: depth=2 tasks=93\nsplit: depth=3 tasks=193\nstart: version=eg-v2.1 k=10 threads=1 tasks=193 reused=0 pending=193 checkpoint=C:\\Users\\56257\\AppData\\Local\\Temp\\eg-bench-4ye_76ap\\k10-t1\ncomplete: version=eg-v2.1 k=10 done=193/193 seconds_this_run=0.48384 states=3007 accepted=3006 subsets=10422 path_prunes=7416 pair_tests=53688 conflict_prunes=49309 max_n=27 audit_digest=0"
+  },
+  {
+    "k": 10,
+    "implementation": "v2",
+    "threads": 8,
+    "wall_seconds": 0.24074879998806864,
+    "output": "split: depth=1 tasks=27\nsplit: depth=2 tasks=93\nsplit: depth=3 tasks=193\nstart: version=eg-v2.1 k=10 threads=8 tasks=193 reused=0 pending=193 checkpoint=C:\\Users\\56257\\AppData\\Local\\Temp\\eg-bench-4ye_76ap\\k10-t8\ncomplete: version=eg-v2.1 k=10 done=193/193 seconds_this_run=0.218655 states=3007 accepted=3006 subsets=10422 path_prunes=7416 pair_tests=53688 conflict_prunes=49309 max_n=27 audit_digest=0"
+  },
+  {
+    "k": 11,
+    "implementation": "reference",
+    "threads": null,
+    "wall_seconds": 24.71704169997247,
+    "output": "time taken: 24697573 microseconds"
+  },
+  {
+    "k": 11,
+    "implementation": "v2",
+    "threads": 1,
+    "wall_seconds": 1.236114599974826,
+    "output": "split: depth=1 tasks=43\nsplit: depth=2 tasks=190\nsplit: depth=3 tasks=468\nstart: version=eg-v2.1 k=11 threads=1 tasks=468 reused=0 pending=468 checkpoint=C:\\Users\\56257\\AppData\\Local\\Temp\\eg-bench-4ye_76ap\\k11-t1\ncomplete: version=eg-v2.1 k=11 done=468/468 seconds_this_run=1.20861 states=22338 accepted=22337 subsets=69453 path_prunes=47116 pair_tests=517289 conflict_prunes=489490 max_n=35 audit_digest=0"
+  },
+  {
+    "k": 11,
+    "implementation": "v2",
+    "threads": 8,
+    "wall_seconds": 0.5789055999484845,
+    "output": "split: depth=1 tasks=43\nsplit: depth=2 tasks=190\nsplit: depth=3 tasks=468\nstart: version=eg-v2.1 k=11 threads=8 tasks=468 reused=0 pending=468 checkpoint=C:\\Users\\56257\\AppData\\Local\\Temp\\eg-bench-4ye_76ap\\k11-t8\ncomplete: version=eg-v2.1 k=11 done=468/468 seconds_this_run=0.556185 states=22338 accepted=22337 subsets=69453 path_prunes=47116 pair_tests=517289 conflict_prunes=489490 max_n=35 audit_digest=0"
+  }
+]

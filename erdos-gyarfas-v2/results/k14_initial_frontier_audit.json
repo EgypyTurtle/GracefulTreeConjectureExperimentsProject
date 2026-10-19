@@ -1,0 +1,20 @@
+{
+  "passed": true,
+  "configuration": {
+    "k": 14,
+    "depth": 4,
+    "limit": 20000,
+    "audit": 0
+  },
+  "tasks": 16695,
+  "manifest_sha256": "bf5a597a09de6606fc6088d6198755cc0d70ef5e958796bf28f7e130f6b10ac6",
+  "initial_frontier_independently_replayed": true,
+  "full_search_independently_replayed": false,
+  "seconds": 40.875,
+  "checked_counts": {
+    "states": 8270,
+    "subsets": 34788,
+    "accepted": 24964,
+    "path_prunes": 9824
+  }
+}

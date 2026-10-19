@@ -1,0 +1,181 @@
+{
+  "passed": true,
+  "cases": [
+    {
+      "k": 3,
+      "depth": 0,
+      "threads": 1,
+      "states": 2,
+      "digest": "17722764320301966154"
+    },
+    {
+      "k": 3,
+      "depth": 1,
+      "threads": 4,
+      "states": 2,
+      "digest": "17722764320301966154"
+    },
+    {
+      "k": 3,
+      "depth": 3,
+      "threads": 4,
+      "states": 2,
+      "digest": "17722764320301966154"
+    },
+    {
+      "k": 4,
+      "depth": 0,
+      "threads": 1,
+      "states": 2,
+      "digest": "4238639990955955628"
+    },
+    {
+      "k": 4,
+      "depth": 1,
+      "threads": 4,
+      "states": 2,
+      "digest": "4238639990955955628"
+    },
+    {
+      "k": 4,
+      "depth": 3,
+      "threads": 4,
+      "states": 2,
+      "digest": "4238639990955955628"
+    },
+    {
+      "k": 5,
+      "depth": 0,
+      "threads": 1,
+      "states": 3,
+      "digest": "8283501821224746460"
+    },
+    {
+      "k": 5,
+      "depth": 1,
+      "threads": 4,
+      "states": 3,
+      "digest": "8283501821224746460"
+    },
+    {
+      "k": 5,
+      "depth": 3,
+      "threads": 4,
+      "states": 3,
+      "digest": "8283501821224746460"
+    },
+    {
+      "k": 6,
+      "depth": 0,
+      "threads": 1,
+      "states": 21,
+      "digest": "4118380536573541862"
+    },
+    {
+      "k": 6,
+      "depth": 1,
+      "threads": 4,
+      "states": 21,
+      "digest": "4118380536573541862"
+    },
+    {
+      "k": 6,
+      "depth": 3,
+      "threads": 4,
+      "states": 21,
+      "digest": "4118380536573541862"
+    },
+    {
+      "k": 7,
+      "depth": 0,
+      "threads": 1,
+      "states": 69,
+      "digest": "7587169714123105658"
+    },
+    {
+      "k": 7,
+      "depth": 1,
+      "threads": 4,
+      "states": 69,
+      "digest": "7587169714123105658"
+    },
+    {
+      "k": 7,
+      "depth": 3,
+      "threads": 4,
+      "states": 69,
+      "digest": "7587169714123105658"
+    },
+    {
+      "k": 8,
+      "depth": 0,
+      "threads": 1,
+      "states": 124,
+      "digest": "10466669153704471094"
+    },
+    {
+      "k": 8,
+      "depth": 1,
+      "threads": 4,
+      "states": 124,
+      "digest": "10466669153704471094"
+    },
+    {
+      "k": 8,
+      "depth": 3,
+      "threads": 4,
+      "states": 124,
+      "digest": "10466669153704471094"
+    },
+    {
+      "k": 9,
+      "depth": 0,
+      "threads": 1,
+      "states": 511,
+      "digest": "13883064796385152434"
+    },
+    {
+      "k": 9,
+      "depth": 1,
+      "threads": 4,
+      "states": 511,
+      "digest": "13883064796385152434"
+    },
+    {
+      "k": 9,
+      "depth": 3,
+      "threads": 4,
+      "states": 511,
+      "digest": "13883064796385152434"
+    },
+    {
+      "k": 10,
+      "depth": 0,
+      "threads": 1,
+      "states": 3007,
+      "digest": "3306305880614035964"
+    },
+    {
+      "k": 10,
+      "depth": 1,
+      "threads": 4,
+      "states": 3007,
+      "digest": "3306305880614035964"
+    },
+    {
+      "k": 10,
+      "depth": 3,
+      "threads": 4,
+      "states": 3007,
+      "digest": "3306305880614035964"
+    }
+  ],
+  "abrupt_kill_resume": {
+    "k": 11,
+    "reused_tasks": 2,
+    "matches_reference": true
+  },
+  "time_limit_incomplete": true,
+  "configuration_mismatch_rejected": true,
+  "corrupt_completion_rejected": true
+}

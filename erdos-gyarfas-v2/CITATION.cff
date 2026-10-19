@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "Cite the fixed Git tag and its archived artifact. No DOI is assigned."
+repository-code: "https://github.com/EgypyTurtle/GracefulTreeConjectureExperimentsProject"
+title: "Completed k=14 Erdos-Gyarfas search: provisional computational artifact"
+type: software
+version: "0.1.0-rc1"
+authors:
+  - family-names: "EgypyTurtle"
+abstract: >-
+  Experimental implementation and artifact-checked completion of a k=14
+  Erdos-Gyarfas extension search, with persistent task refinement. The
+  computational result awaits independent mathematical review; integrity
+  audits do not constitute a full independent DFS replay or formal proof.
+keywords:
+  - "Erdos-Gyarfas conjecture"
+  - "P14-free graphs"
+  - "computational graph theory"
+  - "reproducibility"
+license: MIT

@@ -30,6 +30,19 @@ algorithms.
 
 ## Current Status
 
+### Erdos-Gyarfas counterexample search
+
+A separate counterexample-search project is now under
+[`erdos-gyarfas-v2/`](erdos-gyarfas-v2/). Original server records contain a
+completed k=14 extension search: 18,060/18,060 tasks, 1,435,716,298 search
+states, and no candidate counterexample. Initial-frontier and refinement
+layers were independently replayed in Python; the complete DFS has not been
+independently rerun or externally reviewed. This is not a proof of the
+unrestricted conjecture or an enumeration of every graph through 72 vertices.
+The fixed raw archive, source, tests and audit reports are included; see the
+[verification account](erdos-gyarfas-v2/publication/VERIFICATION.md).
+The next planned experiment is k=15, restricted to logical CPUs 0-15 on socket 0.
+
 ### Graceful non-spider five-leaf trees
 
 The complete non-spider five-leaf family is covered through 62 edges after

@@ -1,0 +1,83 @@
+{
+  "integrity_passed": true,
+  "full_search_independently_replayed": false,
+  "meaning": "Record integrity and optional split-layer replay only; not a proof of all DFS exclusions.",
+  "seconds": 288.1570000000065,
+  "checkpoints": [
+    {
+      "checkpoint": "checkpoints/k14-d4",
+      "configuration": {
+        "k": 14,
+        "depth": 4,
+        "limit": 20000,
+        "audit": 0
+      },
+      "tasks": 16695,
+      "done": 6269,
+      "pending": 10426,
+      "manifest_sha256": "bf5a597a09de6606fc6088d6198755cc0d70ef5e958796bf28f7e130f6b10ac6",
+      "statistics": {
+        "states": 17326785,
+        "subsets": 43327625,
+        "accepted": 17337210,
+        "path_prunes": 25990415,
+        "pair_tests": 739378098,
+        "conflict_prunes": 716130687,
+        "audit_digest": 0,
+        "max_n": 63
+      },
+      "refinement_present": false,
+      "split_layer_independently_replayed": false,
+      "summary": null
+    },
+    {
+      "checkpoint": "checkpoints/k14-d5-refined",
+      "configuration": {
+        "k": 14,
+        "depth": 5,
+        "limit": 200000,
+        "audit": 0
+      },
+      "tasks": 18060,
+      "done": 18060,
+      "pending": 0,
+      "manifest_sha256": "219f148f9947cdfe00743a99d234d44330048191f8d48635f26413a8657ce9f5",
+      "statistics": {
+        "states": 1435716298,
+        "subsets": 3586981712,
+        "accepted": 1435716297,
+        "path_prunes": 2151265415,
+        "pair_tests": 67068942398,
+        "conflict_prunes": 65138643235,
+        "audit_digest": 0,
+        "max_n": 72
+      },
+      "refinement_present": true,
+      "split_layer_independently_replayed": true,
+      "summary": {
+        "version": "eg-v2.1",
+        "k": "14",
+        "done": "18060/18060",
+        "seconds_this_run": "58270.2",
+        "states": "1435716298",
+        "accepted": "1435716297",
+        "subsets": "3586981712",
+        "path_prunes": "2151265415",
+        "pair_tests": "67068942398",
+        "conflict_prunes": "65138643235",
+        "max_n": "72",
+        "audit_digest": "0"
+      }
+    }
+  ],
+  "final_statistics": {
+    "states": 1435716298,
+    "subsets": 3586981712,
+    "accepted": 1435716297,
+    "path_prunes": 2151265415,
+    "pair_tests": 67068942398,
+    "conflict_prunes": 65138643235,
+    "audit_digest": 0,
+    "max_n": 72
+  }
+}

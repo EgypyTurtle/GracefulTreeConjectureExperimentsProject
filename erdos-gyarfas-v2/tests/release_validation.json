@@ -1,0 +1,49 @@
+{
+  "recorded_utc": "2026-10-19T07:29:07.463598+00:00",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "python": "3.12.10",
+  "source_sha256": {
+    "search.cpp": "4082dde09fd354c309e2b194a6fa4307d30f54f3bab02f4a88e11fdcd2f32adc",
+    "refine.cpp": "74f7766fd0c46fcc67e91bcda415f21892fd4ba38cb49a3883d27a238085b6f9"
+  },
+  "full_k14_search_independently_replayed": false,
+  "tests": [
+    {
+      "test": "out\\kernels.exe",
+      "exit_status": 0,
+      "stdout": "PASS kernel comparisons=58847\n",
+      "stderr": ""
+    },
+    {
+      "test": "out\\wide_oracles.exe",
+      "exit_status": 0,
+      "stdout": "PASS wide independent comparisons=81235\nforest=78895 cyclic=2340\n",
+      "stderr": ""
+    },
+    {
+      "test": "tests/test_verifier.py",
+      "exit_status": 0,
+      "stdout": "",
+      "stderr": "...\n----------------------------------------------------------------------\nRan 3 tests in 0.019s\n\nOK\n"
+    },
+    {
+      "test": "tools/regression.py",
+      "exit_status": 0,
+      "stdout": "PASS k=3 state fingerprints, split=0/1/3, task cap, restart\nPASS k=4 state fingerprints, split=0/1/3, task cap, restart\nPASS k=5 state fingerprints, split=0/1/3, task cap, restart\nPASS k=6 state fingerprints, split=0/1/3, task cap, restart\nPASS k=7 state fingerprints, split=0/1/3, task cap, restart\nPASS k=8 state fingerprints, split=0/1/3, task cap, restart\nPASS k=9 state fingerprints, split=0/1/3, task cap, restart\nPASS k=10 state fingerprints, split=0/1/3, task cap, restart\nPASS abrupt kill/resume: reused=2, final fingerprint equals reference\nPASS time limit reports incomplete\nPASS checkpoint configuration mismatch rejected\nPASS corrupt completion fingerprint rejected\n",
+      "stderr": ""
+    },
+    {
+      "test": "tests/test_refine.py",
+      "exit_status": 0,
+      "stdout": "PASS partial + repeated refinement, original checkpoint unchanged\nPASS capped refinement retains branches and reference fingerprint\nPASS completed source carries all statistics\nPASS unsafe destination rejected\n",
+      "stderr": ""
+    },
+    {
+      "test": "tests/test_audit.py",
+      "exit_status": 0,
+      "stdout": "",
+      "stderr": "Auditing records and refinement ancestry...\nPackaging 99 files...\n......\n----------------------------------------------------------------------\nRan 6 tests in 1.122s\n\nOK\n"
+    }
+  ],
+  "passed": true
+}

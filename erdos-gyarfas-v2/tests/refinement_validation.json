@@ -1,0 +1,9 @@
+{
+  "passed": true,
+  "checks": [
+    "partial and repeated refinement preserves reference state count and digest",
+    "capped mixed-depth frontier retains all branches",
+    "fully completed checkpoint carries all statistics",
+    "source and existing destination overwrite rejected"
+  ]
+}
